@@ -1,28 +1,42 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ChefHat, RotateCcw, Smartphone, UserRound, type LucideIcon } from 'lucide-react'
 import { NavLink } from 'react-router'
-import { useRestaurant } from '@/hooks/useRestaurant'
+import { useRestaurantScope } from '@/features/staff/useRestaurantScope'
+import { useActiveOrders, useOpenAlerts } from '@/hooks/useQueries'
 import { useToast } from '@/hooks/useToast'
+import { toAppError } from '@/lib/errors'
+import { DEMO_CLIENT_PATH, DEMO_TABLE_TOKEN, resetDemo } from '@/services/demo'
+import { storageKeys } from '@/features/client/client-context'
 
 const VIEWS: { to: string; label: string; Icon: LucideIcon; badge: 'waiter' | 'kitchen' | null }[] = [
-  { to: '/demo/cliente', label: 'Cliente', Icon: Smartphone, badge: null },
+  { to: DEMO_CLIENT_PATH, label: 'Cliente', Icon: Smartphone, badge: null },
   { to: '/demo/mozo', label: 'Mozo', Icon: UserRound, badge: 'waiter' },
   { to: '/demo/cocina', label: 'Cocina', Icon: ChefHat, badge: 'kitchen' },
 ]
 
 /** Barra superior de la DEMO para alternar entre los tres roles en un mismo navegador. */
 export function DemoBar() {
-  const { resetDemo, pendingOrders, alerts, kitchenOrders } = useRestaurant()
+  const { restaurant } = useRestaurantScope()
+  const orders = useActiveOrders(restaurant.id)
+  const alerts = useOpenAlerts(restaurant.id)
   const toast = useToast()
+  const queryClient = useQueryClient()
 
   const badges = {
-    waiter: pendingOrders.length + alerts.length,
-    kitchen: kitchenOrders.length,
+    waiter: (orders.data?.filter((o) => o.status === 'pending' || o.status === 'ready').length ?? 0) + (alerts.data?.length ?? 0),
+    kitchen: orders.data?.filter((o) => o.status === 'kitchen').length ?? 0,
   }
 
-  const handleReset = () => {
-    resetDemo()
-    toast.show('Demo reiniciada', 'info')
-  }
+  const reset = useMutation({
+    mutationFn: resetDemo,
+    onSuccess: async () => {
+      localStorage.removeItem(storageKeys.session(DEMO_TABLE_TOKEN))
+      localStorage.removeItem(storageKeys.cart(DEMO_TABLE_TOKEN))
+      await queryClient.invalidateQueries()
+      toast.show('Demo reiniciada', 'info')
+    },
+    onError: (err) => toast.show(toAppError(err, 'No se pudo reiniciar la demo.').message, 'error'),
+  })
 
   return (
     <div className="sticky top-0 z-40 bg-stone-900 text-white shadow-md">
@@ -58,12 +72,13 @@ export function DemoBar() {
 
         <button
           type="button"
-          onClick={handleReset}
+          onClick={() => reset.mutate()}
+          disabled={reset.isPending}
           title="Reiniciar demo"
           aria-label="Reiniciar demo"
-          className="rounded-lg p-2 text-stone-400 transition hover:bg-stone-800 hover:text-white"
+          className="rounded-lg p-2 text-stone-400 transition hover:bg-stone-800 hover:text-white disabled:opacity-50"
         >
-          <RotateCcw size={16} />
+          <RotateCcw size={16} className={reset.isPending ? 'animate-spin' : ''} />
         </button>
       </div>
     </div>

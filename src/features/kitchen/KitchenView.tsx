@@ -1,23 +1,29 @@
 import { CheckCircle2, ChefHat, Flame, type LucideIcon } from 'lucide-react'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { RESTAURANT } from '@/data/menu'
-import { useRestaurant } from '@/hooks/useRestaurant'
+import { ErrorState } from '@/components/ui/ErrorState'
+import { CardsSkeleton } from '@/components/ui/Skeleton'
+import { useRestaurantScope } from '@/features/staff/useRestaurantScope'
+import { useActiveOrders } from '@/hooks/useQueries'
+import { useStaffMutations } from '@/hooks/useStaffMutations'
 import { useToast } from '@/hooks/useToast'
-import { countUnits } from '@/lib/format'
 import { useNow } from '@/lib/useNow'
 import { KitchenTicket } from './KitchenTicket'
 
 export default function KitchenView() {
-  const { kitchenOrders, doneOrders, markOrderDone } = useRestaurant()
+  const { restaurant } = useRestaurantScope()
+  const orders = useActiveOrders(restaurant.id)
+  const { setStatus } = useStaffMutations(restaurant.id)
   const toast = useToast()
   const now = useNow(5_000) // la cocina necesita el reloj más preciso
 
-  const plates = kitchenOrders.reduce((s, o) => s + countUnits(o.items), 0)
+  const inKitchen = (orders.data?.filter((o) => o.status === 'kitchen') ?? []).sort(
+    (a, b) => new Date(a.sentToKitchenAt ?? a.createdAt).getTime() - new Date(b.sentToKitchenAt ?? b.createdAt).getTime(),
+  )
+  const readyCount = orders.data?.filter((o) => o.status === 'ready').length ?? 0
+  const plates = inKitchen.reduce((s, o) => s + o.items.reduce((a, i) => a + i.qty, 0), 0)
 
-  const handleDone = (orderId: string) => {
-    markOrderDone(orderId)
-    toast.show('Pedido marcado como listo ✅')
-  }
+  const markReady = (orderId: string) =>
+    setStatus.mutate({ orderId, status: 'ready' }, { onSuccess: () => toast.show('Comanda lista ✅ el mozo ya la ve') })
 
   return (
     <div className="min-h-dvh bg-stone-200">
@@ -29,13 +35,13 @@ export default function KitchenView() {
             </div>
             <div>
               <h1 className="text-xl font-bold whitespace-nowrap">Pantalla de Cocina</h1>
-              <p className="text-xs text-stone-400">KDS · {RESTAURANT.name}</p>
+              <p className="text-xs text-stone-400">KDS · {restaurant.name}</p>
             </div>
           </div>
           <div className="flex gap-5 text-right">
-            <Stat icon={Flame} value={kitchenOrders.length} label="comandas" />
+            <Stat icon={Flame} value={inKitchen.length} label="comandas" />
             <Stat value={plates} label="platos" />
-            <Stat icon={CheckCircle2} value={doneOrders.length} label="listas" muted />
+            <Stat icon={CheckCircle2} value={readyCount} label="por entregar" muted />
           </div>
         </div>
       </header>
@@ -47,12 +53,16 @@ export default function KitchenView() {
           <Legend color="bg-red-500" label="> 15 min" />
         </div>
 
-        {kitchenOrders.length === 0 ? (
+        {orders.isPending ? (
+          <CardsSkeleton count={4} />
+        ) : orders.isError ? (
+          <ErrorState error={orders.error} onRetry={() => orders.refetch()} title="No pudimos cargar las comandas" />
+        ) : inKitchen.length === 0 ? (
           <EmptyState icon={ChefHat} title="Sin comandas en cocina" subtitle="Cuando el mozo apruebe un pedido, aparecerá aquí." />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {kitchenOrders.map((o, idx) => (
-              <KitchenTicket key={o.id} order={o} now={now} index={idx} onDone={() => handleDone(o.id)} />
+            {inKitchen.map((o, idx) => (
+              <KitchenTicket key={o.id} order={o} now={now} index={idx} onReady={() => markReady(o.id)} busy={setStatus.isPending} />
             ))}
           </div>
         )}

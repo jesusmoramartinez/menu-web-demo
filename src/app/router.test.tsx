@@ -1,13 +1,48 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
-import { describe, expect, it } from 'vitest'
-import { routes } from './router'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { demoMenu, demoRestaurant, demoTable, sessionAfterOrder, staffAlerts, staffOrders } from '@/test/fixtures'
+
+// ── Servicios mockeados: la app se prueba sin red ──────────────────────────
+const placeOrder = vi.fn(async () => ({ orderId: 'o-new', sessionId: 's-1', total: 980000 }))
+const updateOrderStatus = vi.fn(async () => {})
+const resolveAlert = vi.fn(async () => {})
+const createAlert = vi.fn(async () => ({ alertId: 'a-new', sessionId: 's-1', created: true }))
+
+vi.mock('@/services/restaurants', () => ({ fetchRestaurantBySlug: vi.fn(async (slug: string) => (slug === 'demo' ? demoRestaurant : null)) }))
+vi.mock('@/services/tables', () => ({ fetchTableByToken: vi.fn(async (token: string) => (token === 'demo-mesa-04' ? demoTable : null)) }))
+vi.mock('@/services/menu', () => ({ fetchMenu: vi.fn(async () => demoMenu) }))
+vi.mock('@/services/orders', () => ({
+  placeOrder: (...args: unknown[]) => placeOrder(...(args as [])),
+  fetchSessionState: vi.fn(async (id: string) => (id === 's-1' ? sessionAfterOrder : null)),
+  fetchActiveOrders: vi.fn(async () => staffOrders),
+  updateOrderStatus: (...args: unknown[]) => updateOrderStatus(...(args as [])),
+  updateOrderItems: vi.fn(async () => {}),
+}))
+vi.mock('@/services/alerts', () => ({
+  createAlert: (...args: unknown[]) => createAlert(...(args as [])),
+  fetchOpenAlerts: vi.fn(async () => staffAlerts),
+  resolveAlert: (...args: unknown[]) => resolveAlert(...(args as [])),
+}))
+vi.mock('@/services/realtime', () => ({ subscribeToRestaurant: vi.fn(() => () => {}) }))
+vi.mock('@/services/demo', async () => ({
+  DEMO_SLUG: 'demo',
+  DEMO_TABLE_TOKEN: 'demo-mesa-04',
+  DEMO_CLIENT_PATH: '/demo/m/demo-mesa-04',
+  resetDemo: vi.fn(async () => {}),
+}))
+
+const { routes } = await import('./router')
 
 function renderAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
   return render(<RouterProvider router={router} />)
 }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 describe('rutas', () => {
   it('/ muestra la landing con acceso a la demo', async () => {
@@ -16,22 +51,16 @@ describe('rutas', () => {
     expect(screen.getByRole('link', { name: /probar la demo/i })).toHaveAttribute('href', '/demo')
   })
 
-  it('/demo redirige a la vista cliente', async () => {
+  it('/demo redirige a la mesa demo y muestra el menú real', async () => {
     renderAt('/demo')
     expect(await screen.findByRole('heading', { level: 1, name: /don remolo/i })).toBeInTheDocument()
-    expect(screen.getByText('Mesa')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /pizzas/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /agotado/i })).toBeDisabled()
   })
 
-  it('/demo/mozo muestra el panel del mozo con datos de prueba', async () => {
-    renderAt('/demo/mozo')
-    expect(await screen.findByRole('heading', { level: 1, name: /panel del mozo/i })).toBeInTheDocument()
-    expect(screen.getByText(/pide la cuenta/i)).toBeInTheDocument()
-  })
-
-  it('/demo/cocina muestra la pantalla de cocina', async () => {
-    renderAt('/demo/cocina')
-    expect(await screen.findByRole('heading', { level: 1, name: /pantalla de cocina/i })).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: /marcar como listo/i }).length).toBeGreaterThan(0)
+  it('un token inexistente muestra "Mesa no encontrada"', async () => {
+    renderAt('/r/demo/m/no-existe')
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(/mesa no encontrada/i)
   })
 
   it('una ruta inexistente muestra 404', async () => {
@@ -40,31 +69,68 @@ describe('rutas', () => {
   })
 })
 
-describe('flujo cliente → mozo → cocina (store en memoria)', () => {
-  it('agregar al carrito, confirmar y ver la comanda en mozo', async () => {
+describe('comensal', () => {
+  it('elige variantes, confirma el pedido y lo sigue en "Mis pedidos"', async () => {
     const user = userEvent.setup()
-    renderAt('/demo/cliente')
+    renderAt('/demo/m/demo-mesa-04')
 
-    const addButtons = await screen.findAllByRole('button', { name: /^agregar /i })
-    await user.click(addButtons[0])
-    await user.click(addButtons[0])
+    // Plato sin opciones: agrega directo
+    await user.click(await screen.findByRole('button', { name: /^agregar agua mineral/i }))
+    expect(screen.getByRole('button', { name: /ver pedido/i })).toHaveTextContent('1')
 
-    const cartBar = screen.getByRole('button', { name: /ver pedido/i })
-    expect(cartBar).toHaveTextContent('2')
-    await user.click(cartBar)
+    // Plato con opciones: abre la hoja, cambia el tamaño y agrega
+    await user.click(screen.getByRole('button', { name: /elegir opciones de muzzarella/i }))
+    const sheet = await screen.findByRole('dialog')
+    await user.click(within(sheet).getByRole('radio', { name: /chica/i }))
+    expect(within(sheet).getByRole('button', { name: /agregar · \$\s?6\.800/i })).toBeInTheDocument()
+    await user.click(within(sheet).getByRole('button', { name: /agregar ·/i }))
 
-    const dialog = await screen.findByRole('dialog')
-    const notes = within(dialog).getByPlaceholderText(/sin cebolla/i)
-    await user.type(notes, 'sin orégano')
-    await user.click(within(dialog).getByRole('button', { name: /confirmar y enviar/i }))
+    // Carrito: dos líneas, total estimado y confirmación
+    await user.click(screen.getByRole('button', { name: /ver pedido/i }))
+    const cart = await screen.findByRole('dialog')
+    expect(within(cart).getByText('Chica')).toBeInTheDocument()
+    await user.click(within(cart).getByRole('button', { name: /confirmar y enviar/i }))
 
-    // El carrito se vació y el toast confirma
+    await waitFor(() => expect(placeOrder).toHaveBeenCalledTimes(1))
+    expect(placeOrder).toHaveBeenCalledWith('demo-mesa-04', [
+      { menu_item_id: 'i-agua', qty: 1, notes: '', option_ids: [] },
+      { menu_item_id: 'i-muzza', qty: 1, notes: '', option_ids: ['opt-chica'] },
+    ])
+
+    // Salta a "Mis pedidos" con el estado del servidor
+    expect(await screen.findByText(/recibido · el mozo lo está revisando/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /ver pedido/i })).not.toBeInTheDocument()
-    expect(await screen.findByText(/pedido enviado/i)).toBeInTheDocument()
+  })
 
-    // El mozo ve la comanda de la Mesa 4 con la nota
-    await user.click(screen.getByRole('link', { name: /mozo/i }))
+  it('llamar al mozo crea la alerta y bloquea el botón', async () => {
+    const user = userEvent.setup()
+    renderAt('/demo/m/demo-mesa-04')
+    await user.click(await screen.findByRole('button', { name: /llamar al mozo/i }))
+    await waitFor(() => expect(createAlert).toHaveBeenCalledWith('demo-mesa-04', 'waiter'))
+    expect(await screen.findByText(/mozo en camino/i)).toBeInTheDocument()
+  })
+})
+
+describe('staff (demo)', () => {
+  it('el mozo ve alertas y comandas, y envía a cocina', async () => {
+    const user = userEvent.setup()
+    renderAt('/demo/mozo')
     expect(await screen.findByRole('heading', { level: 1, name: /panel del mozo/i })).toBeInTheDocument()
-    expect(screen.getByText('sin orégano')).toBeInTheDocument()
+    expect(await screen.findByText(/pide la cuenta/i)).toBeInTheDocument()
+    const pending = await screen.findByRole('article', { name: /comanda mesa 11/i })
+    expect(within(pending).getByText('Una sin aceitunas')).toBeInTheDocument()
+    await user.click(within(pending).getByRole('button', { name: /a cocina/i }))
+    await waitFor(() => expect(updateOrderStatus).toHaveBeenCalledWith('o-pending', 'kitchen'))
+  })
+
+  it('la cocina muestra los tickets en preparación con sus opciones', async () => {
+    const user = userEvent.setup()
+    renderAt('/demo/cocina')
+    expect(await screen.findByRole('heading', { level: 1, name: /pantalla de cocina/i })).toBeInTheDocument()
+    const ticket = await screen.findByRole('article', { name: /comanda mesa 2/i })
+    expect(within(ticket).getByText('Grande')).toBeInTheDocument()
+    expect(within(ticket).getByText(/sin ajo/i)).toBeInTheDocument()
+    await user.click(within(ticket).getByRole('button', { name: /marcar como listo/i }))
+    await waitFor(() => expect(updateOrderStatus).toHaveBeenCalledWith('o-kitchen', 'ready'))
   })
 })

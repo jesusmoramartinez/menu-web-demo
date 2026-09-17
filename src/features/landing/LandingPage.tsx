@@ -1,9 +1,10 @@
 import { ArrowRight, Bell, ChefHat, Pizza, QrCode, Smartphone, UserRound } from 'lucide-react'
 import { Link } from 'react-router'
+import { DEMO_CLIENT_PATH } from '@/services/demo'
 
 const ROLES = [
   {
-    to: '/demo/cliente',
+    to: DEMO_CLIENT_PATH,
     Icon: Smartphone,
     title: 'Cliente',
     text: 'Escanea el QR de la mesa, elige, agrega notas y pide sin esperar al mozo.',

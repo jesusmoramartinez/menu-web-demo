@@ -1,55 +1,182 @@
 /**
- * Tipos de dominio compartidos por toda la UI.
- * Todos los importes están en CENTAVOS (integer) — ver lib/format.ts.
+ * Tipos de dominio de la UI (camelCase). Se construyen desde las filas de la
+ * base (types/database.ts) en la capa services/. Importes SIEMPRE en centavos.
  */
+import type { Database } from './database'
 
-export interface Category {
+export type OrderStatus = Database['public']['Enums']['order_status']
+export type AlertType = Database['public']['Enums']['alert_type']
+export type SessionStatus = Database['public']['Enums']['session_status']
+export type OptionSelection = Database['public']['Enums']['option_selection']
+export type StaffRole = Database['public']['Enums']['staff_role']
+
+export type ToastTone = 'success' | 'info' | 'error'
+
+// ── Restaurante y mesa ─────────────────────────────────────────────────────
+export interface Restaurant {
   id: string
-  label: string
-  emoji: string
+  slug: string
+  name: string
+  tagline: string | null
+  logoUrl: string | null
+  currency: string
+  locale: string
+  /** color de marca (hex) y otras preferencias visuales */
+  theme: { brand?: string }
+  isDemo: boolean
 }
 
-export type MenuTag = 'Popular' | 'Vegetariano' | 'Picante' | 'Chef' | 'Sin alcohol'
+export interface TableInfo {
+  id: string
+  number: number
+  label: string | null
+  sector: string | null
+}
+
+export interface SessionInfo {
+  id: string
+  status: SessionStatus
+  openedAt: string
+}
+
+/** Resultado de get_table_by_token: todo lo que el comensal necesita para empezar. */
+export interface TableContext {
+  restaurant: Restaurant
+  table: TableInfo
+  session: SessionInfo | null
+}
+
+// ── Menú ───────────────────────────────────────────────────────────────────
+export interface Category {
+  id: string
+  name: string
+  emoji: string | null
+  sortOrder: number
+}
+
+export interface MenuOption {
+  id: string
+  name: string
+  priceDelta: number
+  isAvailable: boolean
+}
+
+export interface OptionGroup {
+  id: string
+  name: string
+  selection: OptionSelection
+  required: boolean
+  minSelect: number
+  maxSelect: number | null
+  options: MenuOption[]
+}
 
 export interface MenuItem {
   id: string
-  category: string
+  categoryId: string
   name: string
   description: string
-  /** Precio unitario en centavos */
   price: number
-  image: string
-  tags: MenuTag[]
+  imageUrl: string | null
+  tags: string[]
+  /** agotado hoy (sold_out_until >= hoy) */
+  soldOut: boolean
+  optionGroups: OptionGroup[]
 }
 
-/** Línea de carrito / de pedido. `price` es un snapshot del momento de agregar. */
-export interface CartItem {
+export interface Menu {
+  categories: Category[]
+  items: MenuItem[]
+}
+
+// ── Carrito (local al dispositivo del comensal) ────────────────────────────
+export interface CartLine {
+  /** itemId + opciones ordenadas: dos líneas con la misma clave se fusionan */
+  key: string
   itemId: string
   name: string
-  price: number
+  /** precio unitario con opciones (sólo para mostrar; el servidor recalcula) */
+  unitPrice: number
   qty: number
   notes: string
+  optionIds: string[]
+  optionLabels: string[]
 }
 
-export type OrderStatus = 'pending' | 'kitchen' | 'done'
+// ── Estado de la sesión del comensal (get_session_state) ───────────────────
+export interface SelectedOption {
+  groupName: string
+  optionName: string
+  priceDelta: number
+}
 
-export interface Order {
+export interface SessionOrderItem {
   id: string
-  table: number
+  name: string
+  qty: number
+  unitPrice: number
+  lineTotal: number
+  notes: string
+  selectedOptions: SelectedOption[]
+}
+
+export interface SessionOrder {
+  id: string
   status: OrderStatus
-  createdAt: number
-  sentToKitchenAt: number | null
-  doneAt?: number
-  items: CartItem[]
+  total: number
+  createdAt: string
+  sentToKitchenAt: string | null
+  readyAt: string | null
+  deliveredAt: string | null
+  items: SessionOrderItem[]
 }
 
-export type AlertType = 'waiter' | 'bill'
-
-export interface Alert {
+export interface OpenAlert {
   id: string
-  table: number
   type: AlertType
-  createdAt: number
+  createdAt: string
 }
 
-export type ToastTone = 'success' | 'info' | 'error'
+export interface SessionState {
+  session: { id: string; status: SessionStatus; openedAt: string; closedAt: string | null }
+  table: { id: string; number: number; label: string | null }
+  orders: SessionOrder[]
+  openAlerts: OpenAlert[]
+  total: number
+}
+
+// ── Vistas del staff (mozo / cocina) ───────────────────────────────────────
+export interface StaffOrderItem {
+  id: string
+  menuItemId: string | null
+  name: string
+  unitPrice: number
+  qty: number
+  notes: string
+  lineTotal: number
+  selectedOptions: SelectedOption[]
+}
+
+export interface StaffOrder {
+  id: string
+  tableId: string
+  tableNumber: number
+  tableLabel: string | null
+  sessionId: string
+  status: OrderStatus
+  total: number
+  createdAt: string
+  sentToKitchenAt: string | null
+  readyAt: string | null
+  deliveredAt: string | null
+  items: StaffOrderItem[]
+}
+
+export interface StaffAlert {
+  id: string
+  tableId: string
+  tableNumber: number
+  tableLabel: string | null
+  type: AlertType
+  createdAt: string
+}

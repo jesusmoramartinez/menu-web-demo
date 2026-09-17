@@ -17,8 +17,8 @@ Menú digital interactivo para restaurantes (QR en mesa). Una sola SPA con tres 
 | **Cocina (KDS)** | cocineros | tarjetas de comandas aprobadas con tiempo transcurrido, color por urgencia y notas resaltadas; marca como listo |
 
 Modelo de negocio decidido: **SaaS multi-restaurante** (una app, una base Supabase, cada restaurante con su `slug`).
-Estado actual: **Fases 0 y 1 completadas**. El backend (esquema, RLS, RPCs, tenant demo) ya está aplicado en el
-proyecto Supabase de desarrollo; el frontend todavía usa el store local hasta la Fase 2.
+Estado actual: **Fases 0, 1 y 2 completadas**. Backend en Supabase (dev) y frontend conectado: comensal, mozo y cocina
+operan sobre datos reales; el tenant demo funciona sin login. Falta auth/roles (Fase 3), admin (5) y entrega (6).
 
 ## 2. Stack
 
@@ -68,16 +68,17 @@ Nunca commitear valores. Nunca poner secretos en código.
 ## 3. Rutas
 
 ```
-/                 landing (features/landing) con acceso a la demo
-/demo             → redirige a /demo/cliente
-/demo/cliente     vista cliente (store local)
-/demo/mozo        panel del mozo
-/demo/cocina      pantalla de cocina
-*                 404 (app/RouteError)
-(Fase 2+)         /r/:slug/m/:tableToken · /login · /registro · /mozo · /cocina · /admin
+/                          landing (features/landing) con acceso a la demo
+/r/:slug/m/:tableToken     COMENSAL: resuelve la mesa por token (get_table_by_token), valida el slug, monta ClientView
+/demo                      → redirige a /demo/m/demo-mesa-04
+/demo/m/:tableToken        comensal sobre el tenant demo (con DemoBar)
+/demo/mozo · /demo/cocina  mozo y cocina del tenant demo SIN login (RLS is_demo)
+*                          404 (app/RouteError)
+(Fase 3+)                  /login · /registro · /mozo · /cocina · /admin
 ```
 
-Las vistas se cargan con `React.lazy` (un chunk por rol). `RootLayout` provee `ToastProvider` + `Suspense`; `DemoLayout` provee `RestaurantProvider` + `DemoBar`.
+Las vistas se cargan con `React.lazy` (un chunk por rol). `RootLayout` provee `QueryClientProvider` + `ToastProvider` + `Suspense` + `OfflineBanner`.
+`DemoLayout` carga el restaurante `demo` por slug, lo publica en `RestaurantScopeContext`, suscribe realtime y renderiza `DemoBar` (setea `--topbar-h: 52px` para que los sticky de las vistas se apilen debajo).
 
 ## 4. Estructura
 
@@ -87,52 +88,63 @@ src/
 ├── index.css                    # @import tailwindcss, @theme (brand-*), animaciones, .no-scrollbar
 ├── app/
 │   ├── router.tsx               # `routes` (para tests con createMemoryRouter) y `router`
-│   ├── RootLayout.tsx           # ToastProvider + Suspense + lazy imports de las vistas
+│   ├── RootLayout.tsx           # providers + Suspense + lazy imports de las vistas
+│   ├── queryClient.ts           # createAppQueryClient (staleTime 10 s, retry 1)
 │   ├── RouteError.tsx           # 404 / error de render
-│   └── router.test.tsx          # smoke de rutas + flujo cliente→mozo
-├── types/domain.ts              # MenuItem, CartItem, Order, Alert, OrderStatus, ToastTone…
-├── types/database.ts            # GENERADO por `npm run db:types` — no editar a mano
-├── data/                        # mock de la demo (se elimina en Fase 2)
-│   ├── menu.ts                  # RESTAURANT {name, tagline, currency}, CATEGORIES, MENU_ITEMS
-│   └── seed.ts                  # SEED_ORDERS, SEED_ALERTS
+│   └── router.test.tsx          # rutas + flujo comensal (variantes → pedido → Mis pedidos) + mozo + cocina, con services mockeados
+├── types/
+│   ├── database.ts              # GENERADO por `npm run db:types` — no editar a mano
+│   └── domain.ts                # tipos de UI (camelCase): Restaurant, TableContext, Menu/MenuItem/OptionGroup, CartLine, SessionState, StaffOrder, StaffAlert…
 ├── lib/
+│   ├── supabase.ts              # cliente único (anon key); lanza si faltan las env vars
+│   ├── queryKeys.ts             # qk.*: todo lo del staff cuelga de ['staff', restaurantId]
+│   ├── errors.ts                # toAppError: códigos de las RPCs → mensajes en español
 │   ├── format.ts                # formatPrice(cents, currency, locale), timeAgo, minutesSince, sumLines, countUnits, plural
-│   ├── uid.ts                   # ids locales de la demo
-│   └── useNow.ts                # reloj reactivo
-├── store/                       # estado de la DEMO (localStorage `don-remolo-demo-v2`)
-│   ├── restaurantReducer.ts     # reducer puro + initialState + tipos de acción (testeado)
-│   ├── restaurant-context.ts    # contexto + tipos de acciones/derivados
-│   └── RestaurantProvider.tsx   # persistencia, acciones, derivados
+│   ├── uid.ts, useNow.ts
+├── services/                    # funciones puras sobre supabase-js; mapean filas → dominio. SE MOCKEAN en tests.
+│   ├── restaurants.ts           # fetchRestaurantBySlug, toRestaurant
+│   ├── tables.ts                # fetchTableByToken (RPC)
+│   ├── menu.ts                  # fetchMenu (categorías + platos con option_groups/options embebidos; soldOut calculado)
+│   ├── orders.ts                # placeOrder, fetchSessionState (RPCs) · fetchActiveOrders, updateOrderStatus, updateOrderItems (staff)
+│   ├── alerts.ts                # createAlert (RPC) · fetchOpenAlerts, resolveAlert
+│   ├── realtime.ts              # subscribeToRestaurant(rid, onChange) — postgres_changes filtrados por restaurant_id
+│   └── demo.ts                  # DEMO_SLUG, DEMO_TABLE_TOKEN, DEMO_CLIENT_PATH, resetDemo
 ├── hooks/
-│   ├── useRestaurant.ts         # acceso al store (lanza si falta el Provider)
-│   ├── useToast.ts              # toast.show(message, tone)
-│   └── useFocusTrap.ts          # trap de foco para diálogos
-├── components/ui/               # primitivos sin dependencia del store
-│   ├── Modal.tsx                # <Modal> (portal, overlay, Escape, scroll-lock, focus trap) y <Sheet> (hoja inferior con header/body/footer)
-│   ├── ConfirmDialog.tsx        # reemplazo de window.confirm
-│   ├── Button.tsx               # variantes primary/secondary/success/danger/dangerSolid/ghost/dark, tamaños sm/md/lg
-│   ├── QtyControl.tsx, EmptyState.tsx, PageSpinner.tsx
-│   ├── ToastProvider.tsx + toast-context.ts
+│   ├── useQueries.ts            # useRestaurantBySlug, useTableByToken, useMenu, useSessionState (polling 8 s), useActiveOrders, useOpenAlerts, useRealtimeInvalidation
+│   ├── useStaffMutations.ts     # setStatus / editItems / resolve con invalidación de ['staff', rid] y toast de error
+│   ├── useToast.ts, useFocusTrap.ts
+├── components/ui/               # primitivos sin dependencia de datos
+│   ├── Modal.tsx (Modal + Sheet), ConfirmDialog.tsx, Button.tsx, QtyControl.tsx, EmptyState.tsx, PageSpinner.tsx
+│   ├── Skeleton.tsx (MenuSkeleton, CardsSkeleton), ErrorState.tsx, OfflineBanner.tsx, ToastProvider.tsx + toast-context.ts
 └── features/
-    ├── client/    ClientView, ClientHeader, MenuFilters, MenuItemCard, CartDrawer
-    ├── waiter/    WaiterView, AlertsPanel, OrderCard, OrderEditModal
+    ├── client/
+    │   ├── ClientLayout.tsx     # ruta: resuelve token → skeleton / error / "Mesa no encontrada" / ClientProvider + tema de marca (brandStyle.ts)
+    │   ├── ClientProvider.tsx   # sesión efectiva (mesa abierta en servidor ?? última local) + carrito, persistidos por token
+    │   ├── client-context.ts, useClient.ts, cartReducer.ts (puro, testeado), optionRules.ts (puro, testeado)
+    │   ├── ClientView.tsx       # tabs Menú / Mis pedidos, filtros, carrito flotante, alertas, ThanksScreen si la sesión se cerró
+    │   ├── ClientHeader, MenuFilters, MenuItemCard, ItemOptionsSheet, CartDrawer, MyOrders, OrderStatusSteps, ThanksScreen
+    ├── staff/                   # restaurant-scope-context.ts + useRestaurantScope (restaurante de las vistas de staff)
+    ├── waiter/    WaiterView (alertas · entrantes · listos para entregar · en cocina), AlertsPanel, OrderCard, OrderEditModal
     ├── kitchen/   KitchenView, KitchenTicket, urgency.ts
-    ├── demo/      DemoLayout, DemoBar (NavLinks + badges + reset)
+    ├── demo/      DemoLayout, DemoBar (NavLinks + badges + reset_demo)
     └── landing/   LandingPage
 ```
 
-## 5. Modelo de estado (demo)
+## 5. Modelo de datos en el frontend
 
-`RestaurantState = { table, cart, orders, alerts }` en `useReducer`, persistido en `localStorage`
-bajo `don-remolo-demo-v2`. **Subir la versión de la clave** si cambia la forma del estado.
-Los toasts NO viven en el store: los componentes llaman `useToast().show()` después de la acción.
+**Estado de servidor = React Query** (`hooks/useQueries.ts`), nunca en contextos propios. Claves en `lib/queryKeys.ts`.
+- Staff: `useActiveOrders` / `useOpenAlerts` con `refetchInterval` 15 s de respaldo; `useRealtimeInvalidation(rid)` invalida `['staff', rid]` (y `['menu', rid]` para `menu_items`) al llegar un evento.
+- Comensal: `useSessionState(sessionId)` hace polling cada 8 s (también con la pestaña oculta) y se detiene cuando la sesión no existe o está cerrada. Anónimo no usa realtime (RLS).
+- Mutaciones con `useMutation`; el éxito invalida las claves afectadas; el error va a un toast con `toAppError`.
 
-- **Importes en centavos** (`price: 650000` = $6.500). Mostrar siempre con `formatPrice(cents, RESTAURANT.currency)`.
-- Ciclo de un pedido: `pending` → `kitchen` (`sentToKitchenAt`) → `done` (`doneAt`). En Fase 1 pasa a `pending → kitchen → ready → delivered | cancelled`.
-- El precio se **copia** a la línea al agregar (snapshot). `ALERT_ADD` deduplica por `(table, type)`.
-- El mozo edita sobre copia local en `OrderEditModal`; persiste sólo al Guardar / Enviar.
-- Derivados: `cartTotal`, `cartCount`, `pendingOrders`, `kitchenOrders` (orden por `sentToKitchenAt`), `doneOrders`.
-- Acciones: `setTable, addToCart, setCartQty, setCartNotes, clearCart, submitOrder, updateOrderItems, sendToKitchen, markOrderDone, deleteOrder, addAlert, resolveAlert, resetDemo`.
+**Estado local del comensal** (`ClientProvider`): `sessionId = table.session?.id ?? localSessionId` y `cart` (reducer puro), persistidos en `localStorage` bajo `menu:session:<token>` y `menu:cart:<token>`.
+- `CartLine.key = itemId|opcionesOrdenadas`: misma variante se fusiona; `unitPrice` es sólo para mostrar (el servidor recalcula en `place_order`).
+- Platos con `optionGroups` abren `ItemOptionsSheet` (reglas en `optionRules.ts`: required/min/max/single, preselección del primer single obligatorio); sin opciones se agregan directo.
+- Sesión cerrada (`status = 'closed'`): `ThanksScreen`; "Ver el menú de nuevo" refetchea la mesa y limpia sesión + carrito. Cierres de hace > 2 h se limpian solos.
+- Botones "Llamar al Mozo" / "Pedir la Cuenta" se deshabilitan mientras haya una alerta abierta de ese tipo (`create_alert` es idempotente igual).
+
+**Importes en centavos** siempre; mostrar con `formatPrice(cents, restaurant.currency)`. Ciclo de pedido: `pending → kitchen → ready → delivered | cancelled`
+(mozo: A cocina / Entregado / Cancelar; cocina: Listo). Los timestamps los sella la base.
 
 ## 5b. Base de datos (Supabase) — `supabase/migrations/`
 
@@ -165,6 +177,8 @@ nueva migración = nuevo archivo `YYYYMMDDHHmmss_nombre.sql` (nunca editar una y
 - **Idioma:** UI, comentarios, commits y docs en **español** (voseo en UI: "Agregá", "Probá").
 - **TypeScript estricto**: sin `any`; tipos de dominio en `types/domain.ts`; `import type` para tipos.
 - **Un archivo = componentes o helpers, no ambos** (regla fast-refresh de oxlint). Hooks en `hooks/`, contextos en `*-context.ts`, helpers puros en `.ts`.
+- **Datos:** componentes → hooks (`useQueries`, `useStaffMutations`) → `services/` → supabase. Nunca llamar a `supabase` desde un componente. Los tests mockean `@/services/*` (fixtures en `src/test/fixtures.ts`).
+- **Sin `setState` dentro de efectos** para sincronizar props (regla `react/set-state-in-effect`): derivar en render.
 - **Mobile-first.** Todo debe funcionar a 360px. Botones con `whitespace-nowrap`; footers con `flex-wrap`.
 - **Sin librerías de UI.** Diálogos siempre sobre `Modal`/`Sheet` (accesibilidad resuelta ahí). Confirmaciones con `ConfirmDialog`, nunca `window.confirm`.
 - **Botones:** usar `<Button>` salvo controles muy específicos (chips, barra flotante, tabs). Nunca sobreescribir el color de una variante con `className`: crear variante.
@@ -178,9 +192,9 @@ nueva migración = nuevo archivo `YYYYMMDDHHmmss_nombre.sql` (nunca editar una y
 
 - [x] **Fase 0** — TS, react-router, `components/ui`, precios en centavos, Vitest, hooks separados
 - [x] **Fase 1** — Supabase: esquema, RLS, RPCs, seed del tenant demo, tipos generados, `db:verify` (21 checks)
-- [ ] **Fase 2** — Cliente conectado: `/r/:slug/m/:token`, menú desde DB, `place_order`, Mis pedidos / La cuenta
+- [x] **Fase 2** — Cliente conectado: `/r/:slug/m/:token`, menú desde DB, variantes (ItemOptionsSheet), `place_order`, Mis pedidos / La cuenta, mozo y cocina sobre Supabase con realtime
 - [ ] **Fase 3** — Auth + roles, mozo y cocina en tiempo real, sectores y asignación de mozos, demo pública
-- [ ] **Fase 4** — Variantes y extras
+- [ ] **Fase 4** — Variantes y extras: la UI del comensal ya está (Fase 2); queda el editor en admin (se funde con Fase 5)
 - [ ] **Fase 5** — Panel admin simple (precios, agotado hoy, mesas/QR, personal, configuración)
 - [ ] **Fase 6** — Sonido, PWA/wake lock, landing, CI, deploy Vercel, docs de operación
 
