@@ -6,7 +6,8 @@ import { fetchMenu } from '@/services/menu'
 import { fetchActiveOrders, fetchSessionState } from '@/services/orders'
 import { subscribeToRestaurant } from '@/services/realtime'
 import { fetchRestaurantBySlug } from '@/services/restaurants'
-import { fetchTableByToken } from '@/services/tables'
+import { fetchMyAssignments, fetchMyStaff } from '@/services/staff'
+import { fetchTableByToken, fetchTablesOverview } from '@/services/tables'
 
 /** Restaurante por slug (público). `data === null` cuando no existe. */
 export function useRestaurantBySlug(slug: string) {
@@ -58,6 +59,35 @@ export function useOpenAlerts(restaurantId: string) {
     queryKey: qk.openAlerts(restaurantId),
     queryFn: () => fetchOpenAlerts(restaurantId),
     refetchInterval: 15_000,
+  })
+}
+
+export function useTablesOverview(restaurantId: string) {
+  return useQuery({
+    queryKey: qk.tablesOverview(restaurantId),
+    queryFn: () => fetchTablesOverview(restaurantId),
+    refetchInterval: 15_000,
+  })
+}
+
+/** Asignación de sectores/mesas del mozo autenticado. `undefined` staffId (demo) = consulta apagada. */
+export function useMyAssignments(staffId: string | null) {
+  return useQuery({
+    queryKey: qk.myAssignments(staffId ?? 'none'),
+    queryFn: () => fetchMyAssignments(staffId as string),
+    enabled: !!staffId,
+  })
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────
+
+/** Fila de staff (+ restaurante) del usuario autenticado. `null` = todavía no se unió a ningún restaurante. */
+export function useMyStaff(userId: string | null) {
+  return useQuery({
+    queryKey: qk.myStaff(userId ?? 'none'),
+    queryFn: () => fetchMyStaff(userId as string),
+    enabled: !!userId,
+    staleTime: 60_000,
   })
 }
 

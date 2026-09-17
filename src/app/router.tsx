@@ -1,7 +1,8 @@
 import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { DemoLayout } from '@/features/demo/DemoLayout'
+import { StaffLayout } from '@/features/staff/StaffLayout'
 import { DEMO_CLIENT_PATH } from '@/services/demo'
-import { ClientLayout, KitchenView, LandingPage, RootLayout, WaiterView } from './RootLayout'
+import { ClientLayout, KitchenView, LandingPage, LoginPage, RegisterPage, RootLayout, WaiterView } from './RootLayout'
 import { RouteError } from './RouteError'
 
 /**
@@ -10,7 +11,9 @@ import { RouteError } from './RouteError'
  *  /                        landing
  *  /r/:slug/m/:tableToken   comensal (QR de la mesa)
  *  /demo/*                  tenant demo sin login: cliente (m/:token), mozo, cocina
- *  (Fase 3+)                /login · /registro · /mozo · /cocina · /admin
+ *  /login · /registro       auth del personal
+ *  /mozo · /cocina          staff real, con guard por rol (StaffLayout)
+ *  (Fase 5+)                /admin
  */
 export const routes: RouteObject[] = [
   {
@@ -20,6 +23,8 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <LandingPage /> },
       { path: 'r/:slug/m/:tableToken', element: <ClientLayout /> },
+      { path: 'login', element: <LoginPage /> },
+      { path: 'registro', element: <RegisterPage /> },
       {
         path: 'demo',
         element: <DemoLayout />,
@@ -30,6 +35,16 @@ export const routes: RouteObject[] = [
           { path: 'mozo', element: <WaiterView /> },
           { path: 'cocina', element: <KitchenView /> },
         ],
+      },
+      {
+        path: 'mozo',
+        element: <StaffLayout allowedRoles={['waiter']} />,
+        children: [{ index: true, element: <WaiterView /> }],
+      },
+      {
+        path: 'cocina',
+        element: <StaffLayout allowedRoles={['kitchen']} />,
+        children: [{ index: true, element: <KitchenView /> }],
       },
     ],
   },

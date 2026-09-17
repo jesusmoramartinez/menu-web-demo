@@ -4,6 +4,7 @@ import { toAppError } from '@/lib/errors'
 import { qk } from '@/lib/queryKeys'
 import { resolveAlert } from '@/services/alerts'
 import { updateOrderItems, updateOrderStatus, type OrderItemEdit } from '@/services/orders'
+import { closeTableSession } from '@/services/tables'
 import type { OrderStatus } from '@/types/domain'
 
 /** Mutaciones del staff con invalidación de las queries del restaurante y toasts de error. */
@@ -32,5 +33,11 @@ export function useStaffMutations(restaurantId: string) {
     onError,
   })
 
-  return { setStatus, editItems, resolve }
+  const closeSession = useMutation({
+    mutationFn: (sessionId: string) => closeTableSession(sessionId),
+    onSuccess: invalidate,
+    onError,
+  })
+
+  return { setStatus, editItems, resolve, closeSession }
 }

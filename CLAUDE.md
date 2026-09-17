@@ -17,8 +17,9 @@ Menú digital interactivo para restaurantes (QR en mesa). Una sola SPA con tres 
 | **Cocina (KDS)** | cocineros | tarjetas de comandas aprobadas con tiempo transcurrido, color por urgencia y notas resaltadas; marca como listo |
 
 Modelo de negocio decidido: **SaaS multi-restaurante** (una app, una base Supabase, cada restaurante con su `slug`).
-Estado actual: **Fases 0, 1 y 2 completadas**. Backend en Supabase (dev) y frontend conectado: comensal, mozo y cocina
-operan sobre datos reales; el tenant demo funciona sin login. Falta auth/roles (Fase 3), admin (5) y entrega (6).
+Estado actual: **Fases 0–3 completadas**. Backend en Supabase (dev) y frontend conectado: comensal, mozo y cocina
+operan sobre datos reales; el tenant demo funciona sin login; el personal real inicia sesión y opera su propio
+restaurante con roles y mesas asignadas. Falta admin (Fase 5) y entrega (Fase 6).
 
 ## 2. Stack
 
@@ -41,12 +42,21 @@ npm test            # vitest run
 npm run lint        # oxlint
 npm run build       # tsc -b && vite build (falla si hay errores de tipos)
 
-npm run db:push     # supabase db push --linked --include-seed  (migraciones + supabase/seed.sql)
-npm run db:types    # regenera src/types/database.ts desde el proyecto (correr tras cada migración)
-npm run db:verify   # node scripts/verify-rls.mjs — 21 checks de RLS/RPC con la anon key
+npm run db:push         # supabase db push --linked --include-seed  (migraciones + supabase/seed.sql)
+npm run db:types        # regenera src/types/database.ts desde el proyecto (correr tras cada migración)
+npm run db:verify       # node scripts/verify-rls.mjs — 21 checks de RLS/RPC con la anon key
+npm run db:verify:staff # node scripts/verify-staff-ops.mjs — 7 checks de close_table_session y aislamiento por tenant
 ```
 
-Antes de cerrar cualquier cambio: `lint`, `typecheck`, `test` y `build` en verde; si tocaste SQL, además `db:push`, `db:types` y `db:verify`.
+Antes de cerrar cualquier cambio: `lint`, `typecheck`, `test` y `build` en verde; si tocaste SQL, además `db:push`, `db:types` y ambos `db:verify*`.
+
+> **Trampa de lógica de tres valores en SQL** (real, mordió en la Fase 3): una función `boolean` que termina en
+> `a = b or c in (...)` puede devolver `NULL` en vez de `false` cuando `a = b` compara contra un `NULL` (p. ej.
+> `current_restaurant_id()` sin sesión). En una política RLS `using (...)` eso es inofensivo (Postgres trata NULL
+> como "no pasa"), pero en `if not mi_funcion(...) then raise ...` es un bug de seguridad: `not NULL` es NULL, y
+> un `IF` con NULL no dispara. Siempre envolver funciones de autorización en `coalesce(..., false)`
+> (`can_operate`/`can_manage` en `20260917000700_fix_can_operate_null.sql`). Se detectó con `db:verify:staff`
+> contra un tenant privado real, no por inspección de código — correr los scripts de verificación, no alcanza con leer el SQL.
 Hay `.claude/launch.json` (config `menu-web`) para levantar el dev server desde el Browser pane.
 
 > Nunca editar archivos con `String.prototype.replace` en scripts Node cuando el texto de reemplazo contiene `$`
@@ -73,12 +83,18 @@ Nunca commitear valores. Nunca poner secretos en código.
 /demo                      → redirige a /demo/m/demo-mesa-04
 /demo/m/:tableToken        comensal sobre el tenant demo (con DemoBar)
 /demo/mozo · /demo/cocina  mozo y cocina del tenant demo SIN login (RLS is_demo)
+/login                     email + contraseña (Supabase Auth)
+/registro                  "Tengo un código" (join_restaurant) o "Crear mi restaurante" (create_restaurant)
+/mozo                      STAFF real: StaffLayout(allowedRoles=['waiter']) → WaiterView
+/cocina                    STAFF real: StaffLayout(allowedRoles=['kitchen']) → KitchenView
 *                          404 (app/RouteError)
-(Fase 3+)                  /login · /registro · /mozo · /cocina · /admin
+(Fase 5+)                  /admin
 ```
 
-Las vistas se cargan con `React.lazy` (un chunk por rol). `RootLayout` provee `QueryClientProvider` + `ToastProvider` + `Suspense` + `OfflineBanner`.
-`DemoLayout` carga el restaurante `demo` por slug, lo publica en `RestaurantScopeContext`, suscribe realtime y renderiza `DemoBar` (setea `--topbar-h: 52px` para que los sticky de las vistas se apilen debajo).
+Las vistas se cargan con `React.lazy` (un chunk por rol). `RootLayout` provee `QueryClientProvider` + `AuthProvider` + `ToastProvider` + `Suspense` + `OfflineBanner`.
+`DemoLayout` carga el restaurante `demo` por slug (sin auth), lo publica en `RestaurantScopeContext` con `staffId: null, role: null`, suscribe realtime y renderiza `DemoBar`.
+`StaffLayout` exige sesión real (si no, `<Navigate to="/login" state={{from}}>`), resuelve `staff` del usuario (`useMyStaff`), valida rol (owner/admin siempre pasan; si no, `allowedRoles`) y publica el scope con `staffId`/`role` reales; renderiza `StaffTopBar` (nombre, rol, cerrar sesión, y para owner/admin un switch Mozo↔Cocina) en vez de `DemoBar`.
+`WaiterView`/`KitchenView` son agnósticos de demo-vs-real: sólo leen `useRestaurantScope()`, nunca `useAuth()` directo. `--topbar-h` sólo lo usa `ClientView` (comensal bajo `DemoBar`); las vistas de staff no lo necesitan.
 
 ## 4. Estructura
 
@@ -103,15 +119,18 @@ src/
 │   ├── uid.ts, useNow.ts
 ├── services/                    # funciones puras sobre supabase-js; mapean filas → dominio. SE MOCKEAN en tests.
 │   ├── restaurants.ts           # fetchRestaurantBySlug, toRestaurant
-│   ├── tables.ts                # fetchTableByToken (RPC)
+│   ├── tables.ts                # fetchTableByToken (RPC) · fetchTablesOverview, closeTableSession (RPC, staff)
 │   ├── menu.ts                  # fetchMenu (categorías + platos con option_groups/options embebidos; soldOut calculado)
 │   ├── orders.ts                # placeOrder, fetchSessionState (RPCs) · fetchActiveOrders, updateOrderStatus, updateOrderItems (staff)
 │   ├── alerts.ts                # createAlert (RPC) · fetchOpenAlerts, resolveAlert
+│   ├── staff.ts                 # fetchMyStaff(userId) (+ restaurante embebido), fetchMyAssignments(staffId)
+│   ├── auth.ts                  # getSession, onAuthStateChange, signIn/signUp/signOut, resendSignupEmail, joinRestaurant, createRestaurant (RPCs)
 │   ├── realtime.ts              # subscribeToRestaurant(rid, onChange) — postgres_changes filtrados por restaurant_id
 │   └── demo.ts                  # DEMO_SLUG, DEMO_TABLE_TOKEN, DEMO_CLIENT_PATH, resetDemo
 ├── hooks/
-│   ├── useQueries.ts            # useRestaurantBySlug, useTableByToken, useMenu, useSessionState (polling 8 s), useActiveOrders, useOpenAlerts, useRealtimeInvalidation
-│   ├── useStaffMutations.ts     # setStatus / editItems / resolve con invalidación de ['staff', rid] y toast de error
+│   ├── useQueries.ts            # useRestaurantBySlug, useTableByToken, useMenu, useSessionState (polling 8 s), useActiveOrders, useOpenAlerts, useTablesOverview, useMyAssignments, useMyStaff, useRealtimeInvalidation
+│   ├── useStaffMutations.ts     # setStatus / editItems / resolve / closeSession con invalidación de ['staff', rid] y toast de error
+│   ├── useAuth.ts               # consume AuthContext (session, userId, loading, signOut)
 │   ├── useToast.ts, useFocusTrap.ts
 ├── components/ui/               # primitivos sin dependencia de datos
 │   ├── Modal.tsx (Modal + Sheet), ConfirmDialog.tsx, Button.tsx, QtyControl.tsx, EmptyState.tsx, PageSpinner.tsx
@@ -123,8 +142,15 @@ src/
     │   ├── client-context.ts, useClient.ts, cartReducer.ts (puro, testeado), optionRules.ts (puro, testeado)
     │   ├── ClientView.tsx       # tabs Menú / Mis pedidos, filtros, carrito flotante, alertas, ThanksScreen si la sesión se cerró
     │   ├── ClientHeader, MenuFilters, MenuItemCard, ItemOptionsSheet, CartDrawer, MyOrders, OrderStatusSteps, ThanksScreen
-    ├── staff/                   # restaurant-scope-context.ts + useRestaurantScope (restaurante de las vistas de staff)
-    ├── waiter/    WaiterView (alertas · entrantes · listos para entregar · en cocina), AlertsPanel, OrderCard, OrderEditModal
+    ├── auth/
+    │   ├── auth-context.ts, AuthProvider.tsx  # sesión de Supabase Auth, global (RootLayout)
+    │   ├── LoginPage.tsx, RegisterPage.tsx, ConfirmEmailNotice.tsx
+    │   └── pendingSetup.ts      # guarda en localStorage qué hacer (canjear código / crear restaurante) para completarlo cuando vuelve del link de confirmación de email
+    ├── staff/
+    │   ├── restaurant-scope-context.ts, useRestaurantScope  # { restaurant, staffId, role } — null/null en la demo
+    │   ├── StaffLayout.tsx, StaffTopBar.tsx, roleHome.ts     # guard real de /mozo y /cocina
+    ├── waiter/    WaiterView (tabs Pedidos/Mesas; alertas · entrantes · listos para entregar · en cocina), AlertsPanel, OrderCard,
+    │              OrderEditModal, TablesOverview (grilla de mesas + "Cerrar mesa"), assignmentFilter.ts (puro, testeado)
     ├── kitchen/   KitchenView, KitchenTicket, urgency.ts
     ├── demo/      DemoLayout, DemoBar (NavLinks + badges + reset_demo)
     └── landing/   LandingPage
@@ -148,7 +174,7 @@ src/
 
 ## 5b. Base de datos (Supabase) — `supabase/migrations/`
 
-Migraciones aplicadas (orden): `000100_schema` → `000200_functions` → `000300_policies` → `000400_demo_seed_fn` → `000500_demo_data_and_cron`.
+Migraciones aplicadas (orden): `000100_schema` → `000200_functions` → `000300_policies` → `000400_demo_seed_fn` → `000500_demo_data_and_cron` → `000600_close_session` → `000700_fix_can_operate_null`.
 `supabase/seed.sql` sólo crea el tenant privado **"Bar de Prueba"** (`bar-prueba`, tokens `prueba-mesa-01/02`) para tests de aislamiento; no va a producción.
 
 **Tablas** (todas con `restaurant_id` y RLS): `restaurants`, `sectors`, `tables` (token del QR), `staff` (id = auth.users.id, rol owner/admin/waiter/kitchen),
@@ -162,15 +188,30 @@ Migraciones aplicadas (orden): `000100_schema` → `000200_functions` → `00030
 - `create_alert(p_token, p_type)` → `{alert_id, session_id, created}` (idempotente; `bill` pasa la sesión a `bill_requested`).
 - `get_session_state(p_session_id)` → sesión, mesa, pedidos con ítems, alertas abiertas y total (el uuid de sesión es la capacidad del comensal).
 - `join_restaurant(p_code, p_display_name?)`, `create_restaurant(p_name, p_slug)` (autenticado; errores `NOT_AUTHENTICATED`, `ALREADY_STAFF`, `INVITE_INVALID`, `INVITE_EMAIL_MISMATCH`, `SLUG_INVALID`, `SLUG_TAKEN`).
+- `close_table_session(p_session_id)` (Fase 3, staff): cierra la mesa, resuelve sus alertas abiertas. Idempotente si ya estaba cerrada. Errores: `SESSION_NOT_FOUND`, `NOT_AUTHORIZED`, `SESSION_HAS_ACTIVE_ORDERS`.
 - `reset_demo()` (público) recrea el tenant demo; `seed_demo()` es interna. pg_cron intenta correr `reset_demo()` cada hora (`reset-demo`); confirmar en el dashboard → Integrations → Cron.
 
-**RLS**: helpers `current_restaurant_id()`, `current_staff_role()`, `is_manager()` (security definer) y `can_operate(rid)` / `can_manage(rid)` (inlineables).
+**RLS**: helpers `current_restaurant_id()`, `current_staff_role()`, `is_manager()` (security definer) y `can_operate(rid)` / `can_manage(rid)`, ambas envueltas en `coalesce(..., false)` —
+**nunca les quites el coalesce**: sin él devuelven `NULL` para anon en un tenant no-demo (`p_restaurant_id = NULL` de `current_restaurant_id()`), que una política RLS trata como "no pasa" pero que un `if not can_operate(...) then raise` de PL/pgSQL **no dispara** (bug real, ver nota de la Fase 3 más arriba).
 Menú y restaurantes: lectura pública. Mesas/sesiones/pedidos/ítems/alertas: sólo `can_operate`. Configuración (menú, mesas, sectores, staff, invitaciones): `can_manage`.
 **Tenant demo** (`is_demo = true`, id `00000000-0000-4000-8000-000000000001`, slug `demo`, tokens `demo-mesa-01..12`): `can_operate`/`can_manage` son verdaderas para cualquiera, sin login.
 Realtime publica `orders, order_items, alerts, table_sessions, menu_items` (respeta las políticas de select).
 
 **Convenciones SQL**: ids deterministas del demo con `demo_uuid(bloque, n)`; funciones con `set search_path = public`; funciones internas con `revoke execute ... from public, anon, authenticated`;
-nueva migración = nuevo archivo `YYYYMMDDHHmmss_nombre.sql` (nunca editar una ya aplicada), luego `db:push` + `db:types` + `db:verify`.
+nueva migración = nuevo archivo `YYYYMMDDHHmmss_nombre.sql` (nunca editar una ya aplicada), luego `db:push` + `db:types` + `db:verify` + `db:verify:staff`.
+Cualquier función de autorización nueva (booleana, usada en `if not ... then raise`) va envuelta en `coalesce(..., false)` — no asumir que un `boolean` de SQL nunca es `NULL`.
+
+## 5c. Auth y roles (Fase 3)
+
+**Sesión**: `AuthProvider` (en `RootLayout`, envuelve toda la app) llama `getSession()` + se suscribe con `onAuthStateChange`; expone `{session, userId, loading, signOut}` vía `useAuth()`. Nunca leer `supabase.auth` directo desde un componente — todo pasa por `services/auth.ts`.
+
+**Alta** (`RegisterPage`, dos modos): "Tengo un código" → `joinRestaurant(code, displayName)`; "Crear mi restaurante" → `createRestaurant(name, slug)` (slug autogenerado con `lib/slugify.ts`, editable). Antes de `signUpWithPassword` se guarda la acción en `localStorage` (`features/auth/pendingSetup.ts`) porque **el proyecto exige confirmar el email** (comprobado en vivo: `signUp` no devuelve sesión hasta confirmar) — si `signUp` sí trae sesión inmediata, se consume la acción ahí mismo; si no, se muestra `ConfirmEmailNotice` y, cuando el usuario vuelve del link (`emailRedirectTo: origin + '/registro'`, `detectSessionInUrl: true`), el `useEffect` de `RegisterPage` detecta la sesión nueva y termina el alta sola. Un `useRef` (`consumingRef`) evita que la acción se ejecute dos veces si el submit y el efecto llegan a solaparse.
+
+**Guard** (`StaffLayout`, parametrizado con `allowedRoles`): sin sesión → `/login` (con `state.from`); sin fila `staff` → mensaje + link a `/registro`; `staff.is_active = false` → mensaje de cuenta desactivada; rol fuera de `allowedRoles` (owner/admin siempre entran) → mensaje + link a `roleHome(role)`. Sólo entonces publica `RestaurantScopeContext` y monta la vista — **la misma `WaiterView`/`KitchenView` que usa la demo**, sin ninguna rama de código demo-vs-real dentro de esas vistas.
+
+**Asignación de mozos** (`waiter_assignments`, filtrado en el cliente): `useMyAssignments(staffId)` trae las filas del mozo logueado (`staffId` es `null` en la demo → hook desactivado → sin filtrar, comportamiento actual). `features/waiter/assignmentFilter.ts` (puro, testeado) filtra pedidos/alertas/mesas por sector ∪ mesa asignada; sin asignaciones = ve todo; toggle "Ver todas" en `WaiterView` la pasa por alto. **Todavía no hay UI para crear asignaciones** (eso es Fase 5 → Personal); por ahora se cargan a mano en la base.
+
+**Mesas** (`TablesOverview`, pestaña del mozo): `fetchTablesOverview(restaurantId)` junta `tables` + `table_sessions` abiertas + suma de `orders.total` (no cancelados) por sesión, agrupadas por sector. "Cerrar mesa" llama `close_table_session`; se deshabilita preventivamente con `TableOverview.canClose` (mismo dato que ya trae `useActiveOrders`) y la RPC vuelve a validarlo server-side.
 
 ## 6. Convenciones
 
@@ -187,15 +228,17 @@ nueva migración = nuevo archivo `YYYYMMDDHHmmss_nombre.sql` (nunca editar una y
 - **Tiempo:** nunca `Date.now()` en render; `useNow(intervalo)` y pasar `now` por props.
 - **Accesibilidad mínima:** `aria-label` en botones de ícono, `aria-hidden` en íconos decorativos, `role="dialog"` + `aria-modal` + `aria-labelledby` en diálogos, `role="status"` para toasts.
 - **Tests:** utilidades y reducers con tests unitarios; vistas con smoke vía `createMemoryRouter(routes)`. Ejecutar `npm test` antes de commitear.
+- **Auth:** nunca `supabase.auth.*` directo en un componente — pasa por `services/auth.ts` y `useAuth()`. Guards de ruta (`StaffLayout`) devuelven UI (`<Navigate>` o mensaje), nunca lanzan.
+- **SQL de autorización:** toda función `boolean` para `if not fn(...) then raise` va con `coalesce(..., false)` (ver §5b) — verificarlo con `db:verify:staff`, no alcanza con leerlo.
 
 ## 7. Roadmap (ver `docs/plan-producto.md`)
 
 - [x] **Fase 0** — TS, react-router, `components/ui`, precios en centavos, Vitest, hooks separados
 - [x] **Fase 1** — Supabase: esquema, RLS, RPCs, seed del tenant demo, tipos generados, `db:verify` (21 checks)
 - [x] **Fase 2** — Cliente conectado: `/r/:slug/m/:token`, menú desde DB, variantes (ItemOptionsSheet), `place_order`, Mis pedidos / La cuenta, mozo y cocina sobre Supabase con realtime
-- [ ] **Fase 3** — Auth + roles, mozo y cocina en tiempo real, sectores y asignación de mozos, demo pública
-- [ ] **Fase 4** — Variantes y extras: la UI del comensal ya está (Fase 2); queda el editor en admin (se funde con Fase 5)
-- [ ] **Fase 5** — Panel admin simple (precios, agotado hoy, mesas/QR, personal, configuración)
+- [x] **Fase 3** — Auth (login/registro, confirmación de email), `StaffLayout` con guard por rol, `/mozo` y `/cocina` reales, filtro por asignación de mozo, pestaña Mesas + `close_table_session`, `db:verify:staff` (7 checks). **Pendiente de esta fase:** UI para generar invitaciones y asignar sectores/mesas (se hace en Fase 5 → Personal); verificación end-to-end del login real (bloqueada por confirmación de email — ver §5c y el mensaje de cierre de fase)
+- [ ] **Fase 4** — (fusionada con la Fase 2/5) el editor de variantes en el admin queda en Fase 5
+- [ ] **Fase 5** — Panel admin simple (precios, agotado hoy, mesas/QR, personal → invitaciones y asignación de mozos, configuración)
 - [ ] **Fase 6** — Sonido, PWA/wake lock, landing, CI, deploy Vercel, docs de operación
 
 Fuera de alcance del MVP: pagos online, impresión térmica, facturación de suscripciones, reportes, app nativa.

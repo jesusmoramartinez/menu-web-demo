@@ -162,6 +162,8 @@ export interface StaffOrder {
   tableId: string
   tableNumber: number
   tableLabel: string | null
+  /** null si la mesa no tiene sector asignado */
+  sectorId: string | null
   sessionId: string
   status: OrderStatus
   total: number
@@ -177,6 +179,41 @@ export interface StaffAlert {
   tableId: string
   tableNumber: number
   tableLabel: string | null
+  sectorId: string | null
   type: AlertType
   createdAt: string
+}
+
+// ── Personal (Fase 3: auth + roles) ─────────────────────────────────────────
+export interface Staff {
+  id: string
+  restaurantId: string
+  role: StaffRole
+  displayName: string
+  isActive: boolean
+}
+
+/** Asignación de un mozo a un sector completo o a una mesa puntual (nunca ambos). */
+export interface WaiterAssignment {
+  id: string
+  staffId: string
+  sectorId: string | null
+  tableId: string | null
+}
+
+// ── Mesas (panel del mozo) ──────────────────────────────────────────────────
+export interface TableOverview {
+  id: string
+  number: number
+  label: string | null
+  sectorId: string | null
+  sectorName: string | null
+  /** null = mesa libre, sin sesión abierta */
+  sessionId: string | null
+  sessionStatus: SessionStatus | null
+  openedAt: string | null
+  /** suma de pedidos no cancelados de la sesión abierta */
+  total: number
+  /** true si no hay pedidos pending/kitchen/ready en la sesión: se puede cerrar */
+  canClose: boolean
 }

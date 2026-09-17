@@ -33,7 +33,7 @@ export function DemoLayout() {
   }
 
   return (
-    <RestaurantScopeContext.Provider value={{ restaurant: query.data }}>
+    <RestaurantScopeContext.Provider value={{ restaurant: query.data, staffId: null, role: null }}>
       <div style={layoutStyle}>
         <DemoBar />
         <Suspense fallback={<PageSpinner />}>

@@ -110,7 +110,7 @@ const ACTIVE_STATUSES: OrderStatus[] = ['pending', 'kitchen', 'ready']
 
 const ORDER_SELECT =
   'id, table_id, session_id, status, total, created_at, sent_to_kitchen_at, ready_at, delivered_at, ' +
-  'tables(number, label), ' +
+  'tables(number, label, sector_id), ' +
   'order_items(id, menu_item_id, name_snapshot, unit_price_snapshot, qty, notes, line_total, selected_options, sort_order)'
 
 interface StaffOrderRow {
@@ -123,7 +123,7 @@ interface StaffOrderRow {
   sent_to_kitchen_at: string | null
   ready_at: string | null
   delivered_at: string | null
-  tables: { number: number; label: string | null } | null
+  tables: { number: number; label: string | null; sector_id: string | null } | null
   order_items: {
     id: string
     menu_item_id: string | null
@@ -142,6 +142,7 @@ const toStaffOrder = (o: StaffOrderRow): StaffOrder => ({
   tableId: o.table_id,
   tableNumber: o.tables?.number ?? 0,
   tableLabel: o.tables?.label ?? null,
+  sectorId: o.tables?.sector_id ?? null,
   sessionId: o.session_id,
   status: o.status,
   total: o.total,

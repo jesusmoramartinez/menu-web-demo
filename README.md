@@ -1,8 +1,9 @@
 # 🍕 Menú Digital para Restaurantes (SaaS) — demo "Pizzería Don Remolo"
 
 Menú digital con QR por mesa y comandas en tiempo real. Tres roles en una sola app:
-**Cliente** (menú + carrito + notas), **Mozo** (alertas + revisión de comandas) y
-**Cocina** (KDS con tiempos, urgencia y notas resaltadas).
+**Cliente** (menú + carrito + notas), **Mozo** (alertas + revisión de comandas + mesas) y
+**Cocina** (KDS con tiempos, urgencia y notas resaltadas). El personal de un restaurante real inicia sesión
+(`/login`, `/registro`) y opera sólo su propio restaurante; el tenant demo (`/demo/*`) sigue sin login.
 
 Stack: **React 19 · Vite 8 · TypeScript · Tailwind CSS 4 · react-router 7 · TanStack Query · lucide-react · Vitest**.
 Backend: **Supabase** (Postgres + RLS + RPCs + Realtime), migraciones en `supabase/migrations/`. Roadmap en [`docs/plan-producto.md`](docs/plan-producto.md).
@@ -20,7 +21,11 @@ Abrí `http://localhost:5173`:
 - `/` landing con acceso a la demo
 - `/demo/m/demo-mesa-04` (comensal) · `/demo/mozo` · `/demo/cocina` — el tenant demo funciona sin login y en tiempo real; abrilos en distintas pestañas o dispositivos
 - `/r/<slug>/m/<token>` — URL que va en el QR de cada mesa de un restaurante real
+- `/login` · `/registro` (código de invitación o crear un restaurante nuevo) · `/mozo` · `/cocina` — personal real, con guard por rol
 - El botón ↻ de la barra reinicia la demo (también se reinicia sola cada hora)
+
+> El proyecto Supabase de desarrollo exige confirmar el email al registrarse: después de `/registro` llega un
+> correo con un link; hasta confirmarlo no hay sesión. Es el comportamiento esperado (ver `CLAUDE.md` §5c).
 
 ## Calidad
 
@@ -29,9 +34,10 @@ npm run typecheck   # tsc -b
 npm test            # vitest
 npm run lint        # oxlint
 npm run build       # tsc -b && vite build
-npm run db:push     # aplica migraciones + seed al proyecto Supabase vinculado
-npm run db:types    # regenera src/types/database.ts
-npm run db:verify   # 21 checks de RLS/RPC contra el proyecto
+npm run db:push         # aplica migraciones + seed al proyecto Supabase vinculado
+npm run db:types        # regenera src/types/database.ts
+npm run db:verify       # 21 checks de RLS/RPC contra el proyecto
+npm run db:verify:staff # 7 checks de cierre de mesa y aislamiento por tenant
 ```
 
 ## Flujo de la demo
@@ -41,6 +47,8 @@ npm run db:verify   # 21 checks de RLS/RPC contra el proyecto
    *Llamar al Mozo* / *Pedir la Cuenta* avisan al salón.
 2. **Mozo** → ve las alertas y las marca como atendidas; revisa cada comanda entrante,
    ajusta cantidades/notas, la envía a cocina (o la cancela) y marca los pedidos listos como entregados.
+   En la pestaña **Mesas** ve el panorama por sector (libre / abierta / pidió la cuenta) con el total acumulado
+   y puede cerrar una mesa una vez que no quedan pedidos sin entregar.
 3. **Cocina** → tickets ordenados por antigüedad con color según urgencia
    (verde < 8 min, ámbar 8–15, rojo > 15) y las notas resaltadas. *Marcar como Listo* avisa al mozo y al comensal.
 

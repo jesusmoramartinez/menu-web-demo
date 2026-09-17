@@ -1,4 +1,4 @@
-import type { Menu, Restaurant, SessionState, StaffAlert, StaffOrder, TableContext } from '@/types/domain'
+import type { Menu, Restaurant, SessionState, StaffAlert, StaffOrder, TableContext, TableOverview } from '@/types/domain'
 
 export const demoRestaurant: Restaurant = {
   id: 'r-demo',
@@ -11,6 +11,46 @@ export const demoRestaurant: Restaurant = {
   theme: { brand: '#f97316' },
   isDemo: true,
 }
+
+/** Restaurante "real" (no demo) para los tests de login/registro/guards de rol. */
+export const ownerRestaurant: Restaurant = {
+  id: 'r-owner',
+  slug: 'bar-de-ana',
+  name: 'Bar de Ana',
+  tagline: null,
+  logoUrl: null,
+  currency: 'ARS',
+  locale: 'es-AR',
+  theme: {},
+  isDemo: false,
+}
+
+export const tablesOverview: TableOverview[] = [
+  {
+    id: 'tbl-3',
+    number: 3,
+    label: null,
+    sectorId: 'sec-1',
+    sectorName: 'Salón',
+    sessionId: 'sess-3',
+    sessionStatus: 'bill_requested',
+    openedAt: new Date(Date.now() - 40 * 60_000).toISOString(),
+    total: 220000,
+    canClose: true, // pidió la cuenta y ya no tiene pedidos activos: se puede cerrar
+  },
+  {
+    id: 'tbl-5',
+    number: 5,
+    label: null,
+    sectorId: 'sec-1',
+    sectorName: 'Salón',
+    sessionId: 'sess-5',
+    sessionStatus: 'open',
+    openedAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+    total: 450000,
+    canClose: false, // todavía tiene un pedido activo
+  },
+]
 
 export const demoTable: TableContext = {
   restaurant: demoRestaurant,
@@ -110,6 +150,7 @@ export const staffOrders: StaffOrder[] = [
     tableId: 't-2',
     tableNumber: 2,
     tableLabel: null,
+    sectorId: 'sec-salon',
     sessionId: 's-2',
     status: 'kitchen',
     total: 1120000,
@@ -135,6 +176,7 @@ export const staffOrders: StaffOrder[] = [
     tableId: 't-11',
     tableNumber: 11,
     tableLabel: null,
+    sectorId: 'sec-terraza',
     sessionId: 's-11',
     status: 'pending',
     total: 540000,
@@ -158,5 +200,5 @@ export const staffOrders: StaffOrder[] = [
 ]
 
 export const staffAlerts: StaffAlert[] = [
-  { id: 'a-1', tableId: 't-9', tableNumber: 9, tableLabel: null, type: 'bill', createdAt: minutesAgo(3) },
+  { id: 'a-1', tableId: 't-9', tableNumber: 9, tableLabel: null, sectorId: 'sec-barra', type: 'bill', createdAt: minutesAgo(3) },
 ]

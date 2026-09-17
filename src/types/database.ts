@@ -688,6 +688,10 @@ export type Database = {
     Functions: {
       can_manage: { Args: { p_restaurant_id: string }; Returns: boolean }
       can_operate: { Args: { p_restaurant_id: string }; Returns: boolean }
+      close_table_session: {
+        Args: { p_session_id: string }
+        Returns: undefined
+      }
       create_alert: {
         Args: {
           p_token: string

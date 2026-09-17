@@ -20,14 +20,14 @@ interface AlertRow {
   table_id: string
   type: AlertType
   created_at: string
-  tables: { number: number; label: string | null } | null
+  tables: { number: number; label: string | null; sector_id: string | null } | null
 }
 
 /** Alertas sin resolver del restaurante, de la más vieja a la más nueva. */
 export async function fetchOpenAlerts(restaurantId: string): Promise<StaffAlert[]> {
   const { data, error } = await supabase
     .from('alerts')
-    .select('id, table_id, type, created_at, tables(number, label)')
+    .select('id, table_id, type, created_at, tables(number, label, sector_id)')
     .eq('restaurant_id', restaurantId)
     .is('resolved_at', null)
     .order('created_at')
@@ -37,6 +37,7 @@ export async function fetchOpenAlerts(restaurantId: string): Promise<StaffAlert[
     tableId: a.table_id,
     tableNumber: a.tables?.number ?? 0,
     tableLabel: a.tables?.label ?? null,
+    sectorId: a.tables?.sector_id ?? null,
     type: a.type,
     createdAt: a.created_at,
   }))

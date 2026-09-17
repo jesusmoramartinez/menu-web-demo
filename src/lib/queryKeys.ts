@@ -10,4 +10,7 @@ export const qk = {
   staff: (restaurantId: string) => ['staff', restaurantId] as const,
   activeOrders: (restaurantId: string) => ['staff', restaurantId, 'orders'] as const,
   openAlerts: (restaurantId: string) => ['staff', restaurantId, 'alerts'] as const,
+  tablesOverview: (restaurantId: string) => ['staff', restaurantId, 'tables'] as const,
+  myStaff: (userId: string) => ['my-staff', userId] as const,
+  myAssignments: (staffId: string) => ['my-assignments', staffId] as const,
 }
