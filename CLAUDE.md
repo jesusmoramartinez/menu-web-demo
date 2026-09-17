@@ -17,7 +17,8 @@ Menú digital interactivo para restaurantes (QR en mesa). Una sola SPA con tres 
 | **Cocina (KDS)** | cocineros | tarjetas de comandas aprobadas con tiempo transcurrido, color por urgencia y notas resaltadas; marca como listo |
 
 Modelo de negocio decidido: **SaaS multi-restaurante** (una app, una base Supabase, cada restaurante con su `slug`).
-Estado actual: **Fase 0 completada** (base técnica). La demo sigue funcionando con store local; el backend llega en Fases 1–2.
+Estado actual: **Fases 0 y 1 completadas**. El backend (esquema, RLS, RPCs, tenant demo) ya está aplicado en el
+proyecto Supabase de desarrollo; el frontend todavía usa el store local hasta la Fase 2.
 
 ## 2. Stack
 
@@ -25,7 +26,9 @@ Estado actual: **Fase 0 completada** (base técnica). La demo sigue funcionando 
 - **Tailwind CSS 4** vía `@tailwindcss/vite` (tokens en `src/index.css` con `@theme`; no hay `tailwind.config.js`)
 - **react-router 7** (`createBrowserRouter`, rutas en `src/app/router.tsx`)
 - **lucide-react** para iconos
-- **@supabase/supabase-js** instalado; **todavía no se usa en `src/`** (Fase 1–2)
+- **Supabase** (Postgres + Auth + Realtime) con `@supabase/supabase-js`; la CLI (`supabase`, devDependency) está
+  **vinculada al proyecto de desarrollo** `oopowxlxpwsjpmpyuckm`. No hay Docker en esta máquina: se trabaja
+  directo contra ese proyecto (es de desarrollo, no productivo).
 - Tests: **Vitest** + Testing Library + jsdom (`src/test/setup.ts`)
 - Lint: `oxlint` (no ESLint). Node 24 / npm 11.
 
@@ -37,10 +40,17 @@ npm run typecheck   # tsc -b
 npm test            # vitest run
 npm run lint        # oxlint
 npm run build       # tsc -b && vite build (falla si hay errores de tipos)
+
+npm run db:push     # supabase db push --linked --include-seed  (migraciones + supabase/seed.sql)
+npm run db:types    # regenera src/types/database.ts desde el proyecto (correr tras cada migración)
+npm run db:verify   # node scripts/verify-rls.mjs — 21 checks de RLS/RPC con la anon key
 ```
 
-Antes de cerrar cualquier cambio: `lint`, `typecheck`, `test` y `build` en verde.
+Antes de cerrar cualquier cambio: `lint`, `typecheck`, `test` y `build` en verde; si tocaste SQL, además `db:push`, `db:types` y `db:verify`.
 Hay `.claude/launch.json` (config `menu-web`) para levantar el dev server desde el Browser pane.
+
+> Nunca editar archivos con `String.prototype.replace` en scripts Node cuando el texto de reemplazo contiene `$`
+> (`$'`, `$&`… son patrones especiales): corrompió un regex SQL en la Fase 1. Usar el tool Edit o `split/join`.
 
 > Nota Windows: editar archivos con `sed -i` no dispara el watcher de Vite (reemplaza por rename). Si el dev server sirve código viejo, tocar el archivo o reiniciar `npm run dev`.
 
@@ -81,6 +91,7 @@ src/
 │   ├── RouteError.tsx           # 404 / error de render
 │   └── router.test.tsx          # smoke de rutas + flujo cliente→mozo
 ├── types/domain.ts              # MenuItem, CartItem, Order, Alert, OrderStatus, ToastTone…
+├── types/database.ts            # GENERADO por `npm run db:types` — no editar a mano
 ├── data/                        # mock de la demo (se elimina en Fase 2)
 │   ├── menu.ts                  # RESTAURANT {name, tagline, currency}, CATEGORIES, MENU_ITEMS
 │   └── seed.ts                  # SEED_ORDERS, SEED_ALERTS
@@ -123,6 +134,32 @@ Los toasts NO viven en el store: los componentes llaman `useToast().show()` desp
 - Derivados: `cartTotal`, `cartCount`, `pendingOrders`, `kitchenOrders` (orden por `sentToKitchenAt`), `doneOrders`.
 - Acciones: `setTable, addToCart, setCartQty, setCartNotes, clearCart, submitOrder, updateOrderItems, sendToKitchen, markOrderDone, deleteOrder, addAlert, resolveAlert, resetDemo`.
 
+## 5b. Base de datos (Supabase) — `supabase/migrations/`
+
+Migraciones aplicadas (orden): `000100_schema` → `000200_functions` → `000300_policies` → `000400_demo_seed_fn` → `000500_demo_data_and_cron`.
+`supabase/seed.sql` sólo crea el tenant privado **"Bar de Prueba"** (`bar-prueba`, tokens `prueba-mesa-01/02`) para tests de aislamiento; no va a producción.
+
+**Tablas** (todas con `restaurant_id` y RLS): `restaurants`, `sectors`, `tables` (token del QR), `staff` (id = auth.users.id, rol owner/admin/waiter/kitchen),
+`staff_invites` (código canjeable, single-use), `waiter_assignments` (sector **o** mesa), `categories`, `menu_items` (`price` centavos, `is_available`, `sold_out_until`),
+`option_groups` (single/multiple, required, min/max), `options` (`price_delta`), `table_sessions` (una abierta por mesa: open → bill_requested → closed),
+`orders` (pending → kitchen → ready → delivered | cancelled; `total` lo mantiene un trigger), `order_items` (snapshots de nombre/precio, `selected_options` jsonb, `line_total` generado), `alerts` (una abierta por mesa y tipo).
+
+**RPCs** (`security definer`, el cliente anónimo sólo escribe a través de ellas):
+- `get_table_by_token(p_token)` → restaurante + mesa + sesión abierta (o `null`).
+- `place_order(p_token, p_items)` con `p_items = [{menu_item_id, qty, notes, option_ids[]}]` → `{order_id, session_id, total}`. **Recalcula precios y valida variantes en servidor**; errores: `EMPTY_ORDER`, `TABLE_NOT_FOUND`, `ITEM_NOT_FOUND`, `ITEM_UNAVAILABLE: <nombre>`, `OPTION_REQUIRED/MIN/MAX/SINGLE: <grupo>`, `OPTION_INVALID`, `INVALID_QTY`.
+- `create_alert(p_token, p_type)` → `{alert_id, session_id, created}` (idempotente; `bill` pasa la sesión a `bill_requested`).
+- `get_session_state(p_session_id)` → sesión, mesa, pedidos con ítems, alertas abiertas y total (el uuid de sesión es la capacidad del comensal).
+- `join_restaurant(p_code, p_display_name?)`, `create_restaurant(p_name, p_slug)` (autenticado; errores `NOT_AUTHENTICATED`, `ALREADY_STAFF`, `INVITE_INVALID`, `INVITE_EMAIL_MISMATCH`, `SLUG_INVALID`, `SLUG_TAKEN`).
+- `reset_demo()` (público) recrea el tenant demo; `seed_demo()` es interna. pg_cron intenta correr `reset_demo()` cada hora (`reset-demo`); confirmar en el dashboard → Integrations → Cron.
+
+**RLS**: helpers `current_restaurant_id()`, `current_staff_role()`, `is_manager()` (security definer) y `can_operate(rid)` / `can_manage(rid)` (inlineables).
+Menú y restaurantes: lectura pública. Mesas/sesiones/pedidos/ítems/alertas: sólo `can_operate`. Configuración (menú, mesas, sectores, staff, invitaciones): `can_manage`.
+**Tenant demo** (`is_demo = true`, id `00000000-0000-4000-8000-000000000001`, slug `demo`, tokens `demo-mesa-01..12`): `can_operate`/`can_manage` son verdaderas para cualquiera, sin login.
+Realtime publica `orders, order_items, alerts, table_sessions, menu_items` (respeta las políticas de select).
+
+**Convenciones SQL**: ids deterministas del demo con `demo_uuid(bloque, n)`; funciones con `set search_path = public`; funciones internas con `revoke execute ... from public, anon, authenticated`;
+nueva migración = nuevo archivo `YYYYMMDDHHmmss_nombre.sql` (nunca editar una ya aplicada), luego `db:push` + `db:types` + `db:verify`.
+
 ## 6. Convenciones
 
 - **Idioma:** UI, comentarios, commits y docs en **español** (voseo en UI: "Agregá", "Probá").
@@ -140,7 +177,7 @@ Los toasts NO viven en el store: los componentes llaman `useToast().show()` desp
 ## 7. Roadmap (ver `docs/plan-producto.md`)
 
 - [x] **Fase 0** — TS, react-router, `components/ui`, precios en centavos, Vitest, hooks separados
-- [ ] **Fase 1** — Supabase: esquema, RLS, RPCs, seed del tenant demo, tipos generados
+- [x] **Fase 1** — Supabase: esquema, RLS, RPCs, seed del tenant demo, tipos generados, `db:verify` (21 checks)
 - [ ] **Fase 2** — Cliente conectado: `/r/:slug/m/:token`, menú desde DB, `place_order`, Mis pedidos / La cuenta
 - [ ] **Fase 3** — Auth + roles, mozo y cocina en tiempo real, sectores y asignación de mozos, demo pública
 - [ ] **Fase 4** — Variantes y extras
