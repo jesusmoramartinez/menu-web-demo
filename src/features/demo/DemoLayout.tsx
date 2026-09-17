@@ -6,6 +6,7 @@ import { useRealtimeInvalidation, useRestaurantBySlug } from '@/hooks/useQueries
 import { DEMO_SLUG } from '@/services/demo'
 import { RestaurantScopeContext } from '@/features/staff/restaurant-scope-context'
 import { DemoBar } from './DemoBar'
+import { useAutoResetDemo } from './useAutoResetDemo'
 
 /** Altura de la barra de la demo, para que los sticky de las vistas se apilen debajo. */
 const layoutStyle = { '--topbar-h': '52px' } as CSSProperties
@@ -14,6 +15,7 @@ const layoutStyle = { '--topbar-h': '52px' } as CSSProperties
 export function DemoLayout() {
   const query = useRestaurantBySlug(DEMO_SLUG)
   useRealtimeInvalidation(query.data?.id)
+  useAutoResetDemo(query.data)
 
   if (query.isPending) return <PageSpinner label="Cargando la demo…" />
   if (query.isError) {

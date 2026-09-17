@@ -24,6 +24,8 @@ export interface Restaurant {
   /** color de marca (hex) y otras preferencias visuales */
   theme: { brand?: string }
   isDemo: boolean
+  /** sólo lo trae fetchRestaurantBySlug; se usa para el auto-reset de la demo */
+  createdAt?: string
 }
 
 export interface TableInfo {

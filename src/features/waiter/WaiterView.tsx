@@ -4,8 +4,11 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { CardsSkeleton } from '@/components/ui/Skeleton'
+import { SoundToggle } from '@/components/ui/SoundToggle'
 import { useRestaurantScope } from '@/features/staff/useRestaurantScope'
 import { useActiveOrders, useMyAssignments, useOpenAlerts, useTablesOverview } from '@/hooks/useQueries'
+import { useNewItemsAlert } from '@/hooks/useNewItemsAlert'
+import { useSoundPreference } from '@/hooks/useSoundPreference'
 import { useStaffMutations } from '@/hooks/useStaffMutations'
 import { useToast } from '@/hooks/useToast'
 import { useNow } from '@/lib/useNow'
@@ -29,6 +32,7 @@ export default function WaiterView() {
   const tables = useTablesOverview(restaurant.id)
   const { setStatus, resolve, closeSession } = useStaffMutations(restaurant.id)
   const toast = useToast()
+  const sound = useSoundPreference()
   const [tab, setTab] = useState<Tab>('pedidos')
   const [editing, setEditing] = useState<StaffOrder | null>(null)
   const [showAll, setShowAll] = useState(false)
@@ -45,6 +49,12 @@ export default function WaiterView() {
   const ready = visibleOrders.filter((o) => o.status === 'ready')
   const inKitchen = visibleOrders.filter((o) => o.status === 'kitchen')
 
+  // Avisa (sonido + vibración) cuando llega una alerta o un pedido nuevo por revisar.
+  useNewItemsAlert(
+    useMemo(() => [...visibleAlerts.map((a) => a.id), ...pending.map((o) => o.id)], [visibleAlerts, pending]),
+    sound.enabled,
+  )
+
   const sendToKitchen = (orderId: string) =>
     setStatus.mutate({ orderId, status: 'kitchen' }, { onSuccess: () => toast.show('Comanda enviada a cocina 👨‍🍳') })
   const markDelivered = (orderId: string) =>
@@ -55,9 +65,12 @@ export default function WaiterView() {
   return (
     <div className="min-h-dvh">
       <header className="border-b border-stone-200 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-4">
-          <h1 className="text-xl font-bold">Panel del Mozo</h1>
-          <p className="text-sm text-stone-500">{restaurant.name} · llamados de mesa y comandas</p>
+        <div className="mx-auto flex max-w-6xl items-start justify-between px-4 py-4">
+          <div>
+            <h1 className="text-xl font-bold">Panel del Mozo</h1>
+            <p className="text-sm text-stone-500">{restaurant.name} · llamados de mesa y comandas</p>
+          </div>
+          <SoundToggle enabled={sound.enabled} onToggle={sound.toggle} />
         </div>
         <div className="mx-auto max-w-6xl px-4 pb-3">
           <div className="flex gap-1 rounded-xl bg-stone-200/70 p-1" role="tablist" aria-label="Secciones">

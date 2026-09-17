@@ -203,6 +203,23 @@ describe('staff (demo, sin login)', () => {
     await user.click(within(ticket).getByRole('button', { name: /marcar como listo/i }))
     await waitFor(() => expect(updateOrderStatus).toHaveBeenCalledWith('o-kitchen', 'ready'))
   })
+
+  it('el mozo puede silenciar y reactivar los avisos', async () => {
+    const user = userEvent.setup()
+    renderAt('/demo/mozo')
+    const toggle = await screen.findByRole('button', { name: /silenciar avisos/i })
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    await user.click(toggle)
+    const muted = await screen.findByRole('button', { name: /activar avisos sonoros/i })
+    expect(muted).toHaveAttribute('aria-pressed', 'false')
+    await user.click(muted)
+    expect(await screen.findByRole('button', { name: /silenciar avisos/i })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('la cocina tiene el mismo toggle de sonido', async () => {
+    renderAt('/demo/cocina')
+    expect(await screen.findByRole('button', { name: /silenciar avisos/i })).toHaveAttribute('aria-pressed', 'true')
+  })
 })
 
 describe('login y guards de rol', () => {

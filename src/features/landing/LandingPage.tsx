@@ -1,4 +1,4 @@
-import { ArrowRight, Bell, ChefHat, Pizza, QrCode, Smartphone, UserRound } from 'lucide-react'
+import { ArrowRight, ChefHat, LayoutDashboard, Pizza, QrCode, Smartphone, Store, UserRound } from 'lucide-react'
 import { Link } from 'react-router'
 import { DEMO_CLIENT_PATH } from '@/services/demo'
 
@@ -21,6 +21,12 @@ const ROLES = [
     title: 'Cocina',
     text: 'Pantalla con los pedidos aprobados, tiempos y notas resaltadas.',
   },
+  {
+    to: '/demo/admin',
+    Icon: LayoutDashboard,
+    title: 'Administración',
+    text: 'Menú, mesas con QR, personal y configuración — todo sin tocar código.',
+  },
 ]
 
 export default function LandingPage() {
@@ -33,9 +39,14 @@ export default function LandingPage() {
           </span>
           Menú Digital
         </div>
-        <Link to="/demo" className="text-sm font-semibold text-brand-700 hover:underline">
-          Ver demo
-        </Link>
+        <div className="flex items-center gap-4 text-sm font-semibold">
+          <Link to="/demo" className="text-brand-700 hover:underline">
+            Ver demo
+          </Link>
+          <Link to="/login" className="text-stone-600 hover:underline">
+            Ingresar
+          </Link>
+        </div>
       </header>
 
       <main className="mx-auto max-w-5xl px-4 pt-10 pb-16">
@@ -59,16 +70,23 @@ export default function LandingPage() {
             >
               Probar la demo <ArrowRight size={18} aria-hidden="true" />
             </Link>
-            <a
-              href="mailto:hola@ejemplo.com?subject=Menú%20Digital"
+            <Link
+              to="/registro"
               className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 font-semibold text-stone-700 ring-1 ring-stone-200 transition hover:bg-stone-50"
             >
-              <Bell size={18} aria-hidden="true" /> Quiero una demo para mi local
-            </a>
+              <Store size={18} aria-hidden="true" /> Crear mi restaurante
+            </Link>
           </div>
+          <p className="mt-4 text-sm text-stone-500">
+            ¿Preferís hablar antes?{' '}
+            <a href="mailto:hola@ejemplo.com?subject=Menú%20Digital" className="font-semibold text-brand-700 hover:underline">
+              Escribinos
+            </a>
+            .
+          </p>
         </section>
 
-        <section className="mt-16 grid gap-4 sm:grid-cols-3" aria-label="Roles">
+        <section className="mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-label="Roles">
           {ROLES.map(({ to, Icon, title, text }) => (
             <Link
               key={to}

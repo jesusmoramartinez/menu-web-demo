@@ -17,10 +17,15 @@ Menú digital interactivo para restaurantes (QR en mesa). Una sola SPA con tres 
 | **Cocina (KDS)** | cocineros | tarjetas de comandas aprobadas con tiempo transcurrido, color por urgencia y notas resaltadas; marca como listo |
 
 Modelo de negocio decidido: **SaaS multi-restaurante** (una app, una base Supabase, cada restaurante con su `slug`).
-Estado actual: **Fases 0–5 completadas**. Backend en Supabase (dev) y frontend conectado de punta a punta: comensal,
-mozo, cocina y ahora **administración** (menú con variantes, mesas/QR, personal e invitaciones, configuración)
-operan sobre datos reales; el tenant demo (`/demo/*`, incluido `/demo/admin`) funciona sin login para mostrar las
-cuatro vistas a un prospecto. Falta la entrega (Fase 6: PWA, sonido, CI, deploy).
+Estado actual: **Fases 0–6 completadas** (producto listo para vender, falta sólo desplegar a producción y dar de
+alta el primer cliente real). Backend en Supabase (dev) y frontend conectado de punta a punta: comensal, mozo,
+cocina y **administración** (menú con variantes, mesas/QR, personal e invitaciones, configuración) operan sobre
+datos reales; el tenant demo (`/demo/*`, incluido `/demo/admin`) funciona sin login para mostrar las cuatro
+vistas a un prospecto. La app es instalable como **PWA**, mozo/cocina tienen aviso sonoro + vibración y la
+cocina tiene Wake Lock + pantalla completa para tablets. Hay CI (`.github/workflows/ci.yml`) y docs de
+operación en `docs/` (`deploy.md`, `alta-restaurante.md`, `manual-mozo-cocina.md`). **Pendiente real, fuera de
+código:** crear el proyecto Supabase de producción y desplegar a Vercel (ver `docs/deploy.md`) — son acciones
+externas que requieren decisión y credenciales del usuario, no se hacen desde acá sin que lo pida explícitamente.
 
 ## 2. Stack
 
@@ -164,17 +169,19 @@ src/
     ├── staff/
     │   ├── restaurant-scope-context.ts, useRestaurantScope  # { restaurant, staffId, role } — null/null en la demo
     │   ├── StaffLayout.tsx, StaffTopBar.tsx, roleHome.ts     # guard real de /mozo, /cocina y /admin
-    ├── waiter/    WaiterView (tabs Pedidos/Mesas; alertas · entrantes · listos para entregar · en cocina), AlertsPanel, OrderCard,
+    ├── waiter/    WaiterView (tabs Pedidos/Mesas; alertas · entrantes · listos para entregar · en cocina; SoundToggle + useNewItemsAlert), AlertsPanel, OrderCard,
     │              OrderEditModal, TablesOverview (grilla de mesas + "Cerrar mesa"), assignmentFilter.ts (puro, testeado)
-    ├── kitchen/   KitchenView, KitchenTicket, urgency.ts
+    ├── kitchen/   KitchenView (SoundToggle + useNewItemsAlert, useWakeLock siempre activo, useFullscreen para modo kiosco), KitchenTicket, urgency.ts
     ├── admin/     AdminLayout (tabs Menú/Mesas/Personal/Configuración) + adminNav.ts
     │              AdminMenuPage (categorías + platos, precio/visible/agotado inline) · ItemEditModal + OptionGroupEditor (variantes)
     │              AdminTablesPage (sectores + mesas + QR, hoja para imprimir con print:) · QrCode.tsx
     │              AdminStaffPage (equipo, invitaciones, asignación de mozos por sector/mesa)
     │              AdminSettingsPage (nombre, logo, color de marca, moneda) · ImageUploadField.tsx (URL o subida a Storage)
-    ├── demo/      DemoLayout, DemoBar (NavLinks + badges + reset_demo; 4 tabs incl. Admin)
+    ├── demo/      DemoLayout (+ useAutoResetDemo: red de seguridad client-side, resetea sola si `restaurants.created_at` tiene más de 65 min — por si pg_cron no llegó a activarse), DemoBar (NavLinks + badges + reset_demo; 4 tabs incl. Admin)
     └── landing/   LandingPage
 ```
+
+**PWA y avisos (Fase 6):** `vite-plugin-pwa` (`vite.config.ts`) genera manifest + service worker (`registerType: 'autoUpdate'`, `navigateFallback: '/index.html'` sin denylist — el comensal necesita el fallback offline tanto como el staff); íconos en `public/icon-*.png` generados una sola vez con `scripts/generate-icons.mjs` (sharp, a partir de `scripts/assets/*.svg`) — no hace falta re-correrlo salvo que cambie el ícono. `lib/sound.ts` sintetiza el beep con Web Audio (sin archivos de audio) y expone `vibrate`/`notifyNewItem`; `hooks/useSoundPreference.ts` persiste el mute por dispositivo (`localStorage: menu:sound-enabled`) y desbloquea el audio en el primer `pointerdown` (los navegadores bloquean audio/vibración sin gesto previo — un error de consola "Blocked call to navigator.vibrate" sin gesto de usuario es **esperado**, no un bug). `hooks/useNewItemsAlert.ts` + `lib/hasNewIds.ts` (puro, testeado) comparan ids vistos vs. actuales para no sonar en el montaje inicial, sólo ante ids nuevos.
 
 ## 5. Modelo de datos en el frontend
 
@@ -194,7 +201,7 @@ src/
 
 ## 5b. Base de datos (Supabase) — `supabase/migrations/`
 
-Migraciones aplicadas (orden): `000100_schema` → `000200_functions` → `000300_policies` → `000400_demo_seed_fn` → `000500_demo_data_and_cron` → `000600_close_session` → `000700_fix_can_operate_null`.
+Migraciones aplicadas (orden): `000100_schema` → `000200_functions` → `000300_policies` → `000400_demo_seed_fn` → `000500_demo_data_and_cron` → `000600_close_session` → `000700_fix_can_operate_null` → `20260918000100_storage_media` → `20260918000200_confirm_cron` (idempotente: confirma/programa el job `reset-demo` de pg_cron si no existía).
 `supabase/seed.sql` sólo crea el tenant privado **"Bar de Prueba"** (`bar-prueba`, tokens `prueba-mesa-01/02`) para tests de aislamiento; no va a producción.
 
 **Tablas** (todas con `restaurant_id` y RLS): `restaurants`, `sectors`, `tables` (token del QR), `staff` (id = auth.users.id, rol owner/admin/waiter/kitchen),
@@ -280,6 +287,6 @@ Cualquier función de autorización nueva (booleana, usada en `if not ... then r
 - [x] **Fase 3** — Auth (login/registro, confirmación de email), `StaffLayout` con guard por rol, `/mozo` y `/cocina` reales, filtro por asignación de mozo, pestaña Mesas + `close_table_session`, `db:verify:staff` (7 checks)
 - [x] **Fase 4** — fusionada: el editor de variantes vive en `ItemEditModal`/`OptionGroupEditor` (Fase 5)
 - [x] **Fase 5** — Panel admin (`/admin`, y `/demo/admin` sin login): menú con precio/visible/agotado hoy inline + variantes, mesas/sectores con QR descargable y hoja para imprimir, personal (roles, invitaciones, asignación de mozos), configuración (nombre/logo/color/moneda) con subida de imágenes a Storage. 59 tests, todo verificado en vivo contra el tenant demo (crear plato con variantes → aparece en el menú real del comensal; cerrar mesa; cambiar el color y verlo propagarse a `StaffTopBar`/`DemoBar`/comensal). **Pendiente de esta fase:** verificación end-to-end del login real de un mozo/admin de carne y hueso (bloqueada por confirmación de email, igual que en la Fase 3 — ver §5c)
-- [ ] **Fase 6** — Sonido, PWA/wake lock, landing, CI, deploy Vercel, docs de operación
+- [x] **Fase 6** — Sonido + vibración en mozo/cocina (`lib/sound.ts`, mute persistido por dispositivo), PWA instalable (`vite-plugin-pwa`, íconos propios), Wake Lock + pantalla completa en cocina, landing con tarjeta de Admin y CTA a `/registro`, red de seguridad client-side para el reset horario de la demo (`useAutoResetDemo`, por si `pg_cron` no llegó a activarse), CI (`.github/workflows/ci.yml`: lint/typecheck/test/build), `vercel.json` (rewrite SPA) y docs de operación (`docs/deploy.md`, `docs/alta-restaurante.md`, `docs/manual-mozo-cocina.md`). **Pendiente, fuera de código:** crear el proyecto Supabase de producción y hacer el deploy real a Vercel (ver `docs/deploy.md`) — son acciones externas que requieren decisión y credenciales del usuario.
 
 Fuera de alcance del MVP: pagos online, impresión térmica, facturación de suscripciones, reportes, app nativa.

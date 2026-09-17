@@ -1,12 +1,18 @@
-import { CheckCircle2, ChefHat, Flame, type LucideIcon } from 'lucide-react'
+import { CheckCircle2, ChefHat, Flame, Maximize, Minimize, type LucideIcon } from 'lucide-react'
+import { useMemo } from 'react'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { CardsSkeleton } from '@/components/ui/Skeleton'
+import { SoundToggle } from '@/components/ui/SoundToggle'
 import { useRestaurantScope } from '@/features/staff/useRestaurantScope'
 import { useActiveOrders } from '@/hooks/useQueries'
+import { useFullscreen } from '@/hooks/useFullscreen'
+import { useNewItemsAlert } from '@/hooks/useNewItemsAlert'
+import { useSoundPreference } from '@/hooks/useSoundPreference'
 import { useStaffMutations } from '@/hooks/useStaffMutations'
 import { useToast } from '@/hooks/useToast'
 import { useNow } from '@/lib/useNow'
+import { useWakeLock } from '@/hooks/useWakeLock'
 import { KitchenTicket } from './KitchenTicket'
 
 export default function KitchenView() {
@@ -14,13 +20,24 @@ export default function KitchenView() {
   const orders = useActiveOrders(restaurant.id)
   const { setStatus } = useStaffMutations(restaurant.id)
   const toast = useToast()
+  const sound = useSoundPreference()
+  const fullscreen = useFullscreen()
   const now = useNow(5_000) // la cocina necesita el reloj más preciso
+
+  // La pantalla de cocina suele quedar fija en una tablet: no dejamos que se apague sola.
+  useWakeLock(true)
 
   const inKitchen = (orders.data?.filter((o) => o.status === 'kitchen') ?? []).sort(
     (a, b) => new Date(a.sentToKitchenAt ?? a.createdAt).getTime() - new Date(b.sentToKitchenAt ?? b.createdAt).getTime(),
   )
   const readyCount = orders.data?.filter((o) => o.status === 'ready').length ?? 0
   const plates = inKitchen.reduce((s, o) => s + o.items.reduce((a, i) => a + i.qty, 0), 0)
+
+  // Avisa (sonido + vibración) cuando entra una comanda nueva a cocina.
+  useNewItemsAlert(
+    useMemo(() => inKitchen.map((o) => o.id), [inKitchen]),
+    sound.enabled,
+  )
 
   const markReady = (orderId: string) =>
     setStatus.mutate({ orderId, status: 'ready' }, { onSuccess: () => toast.show('Comanda lista ✅ el mozo ya la ve') })
@@ -38,10 +55,26 @@ export default function KitchenView() {
               <p className="text-xs text-stone-400">KDS · {restaurant.name}</p>
             </div>
           </div>
-          <div className="flex gap-5 text-right">
-            <Stat icon={Flame} value={inKitchen.length} label="comandas" />
-            <Stat value={plates} label="platos" />
-            <Stat icon={CheckCircle2} value={readyCount} label="por entregar" muted />
+          <div className="flex items-center gap-4">
+            <div className="flex gap-5 text-right">
+              <Stat icon={Flame} value={inKitchen.length} label="comandas" />
+              <Stat value={plates} label="platos" />
+              <Stat icon={CheckCircle2} value={readyCount} label="por entregar" muted />
+            </div>
+            <div className="flex gap-1 border-l border-stone-700 pl-4">
+              <SoundToggle enabled={sound.enabled} onToggle={sound.toggle} dark />
+              {fullscreen.supported && (
+                <button
+                  type="button"
+                  onClick={fullscreen.toggle}
+                  title={fullscreen.isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+                  aria-label={fullscreen.isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
+                  className="rounded-lg p-2 text-stone-400 transition hover:bg-stone-800 hover:text-white"
+                >
+                  {fullscreen.isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </header>

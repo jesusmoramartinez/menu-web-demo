@@ -7,7 +7,9 @@ configuración). El personal de un restaurante real inicia sesión (`/login`, `/
 restaurante; el tenant demo (`/demo/*`, incluido `/demo/admin`) sigue sin login.
 
 Stack: **React 19 · Vite 8 · TypeScript · Tailwind CSS 4 · react-router 7 · TanStack Query · lucide-react · Vitest**.
-Backend: **Supabase** (Postgres + RLS + RPCs + Realtime), migraciones en `supabase/migrations/`. Roadmap en [`docs/plan-producto.md`](docs/plan-producto.md).
+Backend: **Supabase** (Postgres + RLS + RPCs + Realtime), migraciones en `supabase/migrations/`. Instalable como
+**PWA**; mozo y cocina tienen aviso sonoro + vibración (con mute por dispositivo) y la cocina tiene modo
+pantalla completa + Wake Lock para tablets. Roadmap en [`docs/plan-producto.md`](docs/plan-producto.md).
 
 ## Correr el proyecto
 
@@ -61,3 +63,9 @@ npm run db:verify:staff # 7 checks de cierre de mesa y aislamiento por tenant
 
 Ver [`CLAUDE.md`](CLAUDE.md) §4 (estructura), §5 (modelo de estado) y §6 (convenciones).
 Roadmap y decisiones de producto en [`docs/plan-producto.md`](docs/plan-producto.md).
+
+## Operación y deploy
+
+- [`docs/deploy.md`](docs/deploy.md) — poner el proyecto en producción (Supabase + Vercel + CI).
+- [`docs/alta-restaurante.md`](docs/alta-restaurante.md) — checklist para dar de alta un cliente nuevo.
+- [`docs/manual-mozo-cocina.md`](docs/manual-mozo-cocina.md) — guía rápida para el personal de salón y cocina.
