@@ -4,16 +4,16 @@ import type { Category, Menu, MenuItem, OptionGroup, OptionSelection } from '@/t
 /** Fecha de hoy en UTC (misma referencia que `current_date` en la base). */
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
-const bySort = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order
+export const bySort = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order
 
-interface OptionRow {
+export interface OptionRow {
   id: string
   name: string
   price_delta: number
   is_available: boolean
   sort_order: number
 }
-interface GroupRow {
+export interface GroupRow {
   id: string
   name: string
   selection: OptionSelection
@@ -36,7 +36,7 @@ interface ItemRow {
   option_groups: GroupRow[]
 }
 
-const toGroup = (g: GroupRow): OptionGroup => ({
+export const toGroup = (g: GroupRow): OptionGroup => ({
   id: g.id,
   name: g.name,
   selection: g.selection,

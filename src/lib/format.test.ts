@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { countUnits, formatPrice, minutesSince, plural, sumLines, timeAgo } from './format'
+import { countUnits, formatPrice, minutesSince, plural, sumLines, timeAgo, timeUntil } from './format'
 
 describe('formatPrice', () => {
   it('formatea centavos en ARS sin decimales', () => {
@@ -27,6 +27,24 @@ describe('timeAgo', () => {
   })
   it('no devuelve valores negativos si el timestamp es futuro', () => {
     expect(timeAgo(now + 60_000, now)).toBe('recién')
+  })
+})
+
+describe('timeUntil', () => {
+  const now = 1_700_000_000_000
+  it('vencida si ya pasó', () => {
+    expect(timeUntil(now - 1000, now)).toBe('vencida')
+    expect(timeUntil(now, now)).toBe('vencida')
+  })
+  it('hoy para menos de una hora', () => {
+    expect(timeUntil(now + 30 * 60_000, now)).toBe('hoy')
+  })
+  it('en horas', () => {
+    expect(timeUntil(now + 5 * 3_600_000, now)).toBe('en 5 h')
+  })
+  it('en días, pluralizado', () => {
+    expect(timeUntil(now + 24 * 3_600_000, now)).toBe('en 1 día')
+    expect(timeUntil(now + 7 * 24 * 3_600_000, now)).toBe('en 7 días')
   })
 })
 

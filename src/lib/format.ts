@@ -30,6 +30,18 @@ export function timeAgo(timestamp: number, now = Date.now()): string {
   return rest ? `hace ${h} h ${rest} min` : `hace ${h} h`
 }
 
+/** "en 3 días", "en 1 h", "hoy", "vencida" — para fechas futuras (p. ej. el vencimiento de una invitación). */
+export function timeUntil(timestamp: number, now = Date.now()): string {
+  const diff = Math.floor((timestamp - now) / 1000)
+  if (diff <= 0) return 'vencida'
+  const min = Math.floor(diff / 60)
+  if (min < 60) return 'hoy'
+  const h = Math.floor(min / 60)
+  if (h < 24) return `en ${h} h`
+  const days = Math.floor(h / 24)
+  return `en ${days} ${plural(days, 'día', 'días')}`
+}
+
 /** Minutos enteros transcurridos (para colorear tarjetas de cocina). */
 export function minutesSince(timestamp: number, now = Date.now()): number {
   return Math.floor((now - timestamp) / 60_000)

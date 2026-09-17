@@ -2,7 +2,20 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router'
 import { DemoLayout } from '@/features/demo/DemoLayout'
 import { StaffLayout } from '@/features/staff/StaffLayout'
 import { DEMO_CLIENT_PATH } from '@/services/demo'
-import { ClientLayout, KitchenView, LandingPage, LoginPage, RegisterPage, RootLayout, WaiterView } from './RootLayout'
+import {
+  AdminLayout,
+  AdminMenuPage,
+  AdminSettingsPage,
+  AdminStaffPage,
+  AdminTablesPage,
+  ClientLayout,
+  KitchenView,
+  LandingPage,
+  LoginPage,
+  RegisterPage,
+  RootLayout,
+  WaiterView,
+} from './RootLayout'
 import { RouteError } from './RouteError'
 
 /**
@@ -10,11 +23,19 @@ import { RouteError } from './RouteError'
  *
  *  /                        landing
  *  /r/:slug/m/:tableToken   comensal (QR de la mesa)
- *  /demo/*                  tenant demo sin login: cliente (m/:token), mozo, cocina
+ *  /demo/*                  tenant demo sin login: cliente (m/:token), mozo, cocina, admin
  *  /login · /registro       auth del personal
  *  /mozo · /cocina          staff real, con guard por rol (StaffLayout)
- *  (Fase 5+)                /admin
+ *  /admin/*                 staff real, sólo owner/admin (StaffLayout + AdminLayout)
  */
+const adminChildren: RouteObject[] = [
+  { index: true, element: <Navigate to="menu" replace /> },
+  { path: 'menu', element: <AdminMenuPage /> },
+  { path: 'mesas', element: <AdminTablesPage /> },
+  { path: 'personal', element: <AdminStaffPage /> },
+  { path: 'configuracion', element: <AdminSettingsPage /> },
+]
+
 export const routes: RouteObject[] = [
   {
     path: '/',
@@ -34,6 +55,7 @@ export const routes: RouteObject[] = [
           { path: 'm/:tableToken', element: <ClientLayout slug="demo" /> },
           { path: 'mozo', element: <WaiterView /> },
           { path: 'cocina', element: <KitchenView /> },
+          { path: 'admin', element: <AdminLayout />, children: adminChildren },
         ],
       },
       {
@@ -45,6 +67,12 @@ export const routes: RouteObject[] = [
         path: 'cocina',
         element: <StaffLayout allowedRoles={['kitchen']} />,
         children: [{ index: true, element: <KitchenView /> }],
+      },
+      {
+        path: 'admin',
+        // allowedRoles vacío: sólo owner/admin (siempre pasan el guard) llegan a AdminLayout
+        element: <StaffLayout allowedRoles={[]} />,
+        children: [{ element: <AdminLayout />, children: adminChildren }],
       },
     ],
   },

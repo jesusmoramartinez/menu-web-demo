@@ -1,9 +1,10 @@
 # 🍕 Menú Digital para Restaurantes (SaaS) — demo "Pizzería Don Remolo"
 
-Menú digital con QR por mesa y comandas en tiempo real. Tres roles en una sola app:
-**Cliente** (menú + carrito + notas), **Mozo** (alertas + revisión de comandas + mesas) y
-**Cocina** (KDS con tiempos, urgencia y notas resaltadas). El personal de un restaurante real inicia sesión
-(`/login`, `/registro`) y opera sólo su propio restaurante; el tenant demo (`/demo/*`) sigue sin login.
+Menú digital con QR por mesa y comandas en tiempo real. Cuatro vistas en una sola app:
+**Cliente** (menú + carrito + notas), **Mozo** (alertas + revisión de comandas + mesas), **Cocina** (KDS con
+tiempos, urgencia y notas resaltadas) y **Administración** (menú y variantes, mesas/QR, personal e invitaciones,
+configuración). El personal de un restaurante real inicia sesión (`/login`, `/registro`) y opera sólo su propio
+restaurante; el tenant demo (`/demo/*`, incluido `/demo/admin`) sigue sin login.
 
 Stack: **React 19 · Vite 8 · TypeScript · Tailwind CSS 4 · react-router 7 · TanStack Query · lucide-react · Vitest**.
 Backend: **Supabase** (Postgres + RLS + RPCs + Realtime), migraciones en `supabase/migrations/`. Roadmap en [`docs/plan-producto.md`](docs/plan-producto.md).
@@ -19,9 +20,9 @@ Necesitás `.env.local` con `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` del p
 Abrí `http://localhost:5173`:
 
 - `/` landing con acceso a la demo
-- `/demo/m/demo-mesa-04` (comensal) · `/demo/mozo` · `/demo/cocina` — el tenant demo funciona sin login y en tiempo real; abrilos en distintas pestañas o dispositivos
+- `/demo/m/demo-mesa-04` (comensal) · `/demo/mozo` · `/demo/cocina` · `/demo/admin` — el tenant demo funciona sin login y en tiempo real; abrilos en distintas pestañas o dispositivos
 - `/r/<slug>/m/<token>` — URL que va en el QR de cada mesa de un restaurante real
-- `/login` · `/registro` (código de invitación o crear un restaurante nuevo) · `/mozo` · `/cocina` — personal real, con guard por rol
+- `/login` · `/registro` (código de invitación o crear un restaurante nuevo) · `/mozo` · `/cocina` · `/admin` — personal real, con guard por rol (`/admin` sólo dueño/administración)
 - El botón ↻ de la barra reinicia la demo (también se reinicia sola cada hora)
 
 > El proyecto Supabase de desarrollo exige confirmar el email al registrarse: después de `/registro` llega un
@@ -51,6 +52,10 @@ npm run db:verify:staff # 7 checks de cierre de mesa y aislamiento por tenant
    y puede cerrar una mesa una vez que no quedan pedidos sin entregar.
 3. **Cocina** → tickets ordenados por antigüedad con color según urgencia
    (verde < 8 min, ámbar 8–15, rojo > 15) y las notas resaltadas. *Marcar como Listo* avisa al mozo y al comensal.
+4. **Administración** → cargá categorías y platos (con foto, tags y variantes tipo "Tamaño"/"Extras"), marcá
+   un plato "agotado hoy" o cambiá su precio sin salir de la lista, dale de alta sectores y mesas y descargá
+   el QR de cada una (o la hoja completa para imprimir), invitá gente al equipo con un código y asignale
+   sectores o mesas puntuales, y personalizá el nombre, el logo, la moneda y el color de marca del restaurante.
 
 ## Estructura
 

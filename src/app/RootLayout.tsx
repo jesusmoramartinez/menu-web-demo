@@ -14,6 +14,11 @@ export const WaiterView = lazy(() => import('@/features/waiter/WaiterView'))
 export const KitchenView = lazy(() => import('@/features/kitchen/KitchenView'))
 export const LoginPage = lazy(() => import('@/features/auth/LoginPage'))
 export const RegisterPage = lazy(() => import('@/features/auth/RegisterPage'))
+export const AdminLayout = lazy(() => import('@/features/admin/AdminLayout'))
+export const AdminMenuPage = lazy(() => import('@/features/admin/AdminMenuPage'))
+export const AdminTablesPage = lazy(() => import('@/features/admin/AdminTablesPage'))
+export const AdminStaffPage = lazy(() => import('@/features/admin/AdminStaffPage'))
+export const AdminSettingsPage = lazy(() => import('@/features/admin/AdminSettingsPage'))
 
 export function RootLayout() {
   const [queryClient] = useState(createAppQueryClient)

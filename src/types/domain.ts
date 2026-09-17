@@ -217,3 +217,54 @@ export interface TableOverview {
   /** true si no hay pedidos pending/kitchen/ready en la sesión: se puede cerrar */
   canClose: boolean
 }
+
+// ── Administración (Fase 5) ─────────────────────────────────────────────────
+export interface Sector {
+  id: string
+  name: string
+  sortOrder: number
+}
+
+export interface AdminCategory {
+  id: string
+  name: string
+  emoji: string | null
+  sortOrder: number
+  isActive: boolean
+}
+
+/** Grupo de opciones tal como lo edita el admin (mismo shape que OptionGroup, sin filtrar disponibilidad). */
+export interface AdminMenuItem {
+  id: string
+  categoryId: string
+  name: string
+  description: string
+  price: number
+  imageUrl: string | null
+  tags: string[]
+  isAvailable: boolean
+  /** fecha (YYYY-MM-DD) hasta la que está agotado, o null */
+  soldOutUntil: string | null
+  sortOrder: number
+  optionGroups: OptionGroup[]
+}
+
+export interface AdminTable {
+  id: string
+  number: number
+  label: string | null
+  sectorId: string | null
+  token: string
+  isActive: boolean
+}
+
+export interface StaffInvite {
+  id: string
+  email: string | null
+  role: StaffRole
+  code: string
+  usedAt: string | null
+  expiresAt: string
+  createdAt: string
+}
+

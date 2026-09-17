@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ChefHat, RotateCcw, Smartphone, UserRound, type LucideIcon } from 'lucide-react'
+import { ChefHat, LayoutDashboard, RotateCcw, Smartphone, UserRound, type LucideIcon } from 'lucide-react'
 import { NavLink } from 'react-router'
 import { useRestaurantScope } from '@/features/staff/useRestaurantScope'
 import { useActiveOrders, useOpenAlerts } from '@/hooks/useQueries'
@@ -12,6 +12,7 @@ const VIEWS: { to: string; label: string; Icon: LucideIcon; badge: 'waiter' | 'k
   { to: DEMO_CLIENT_PATH, label: 'Cliente', Icon: Smartphone, badge: null },
   { to: '/demo/mozo', label: 'Mozo', Icon: UserRound, badge: 'waiter' },
   { to: '/demo/cocina', label: 'Cocina', Icon: ChefHat, badge: 'kitchen' },
+  { to: '/demo/admin', label: 'Admin', Icon: LayoutDashboard, badge: null },
 ]
 
 /** Barra superior de la DEMO para alternar entre los tres roles en un mismo navegador. */

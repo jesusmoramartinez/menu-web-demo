@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
-import { ChefHat, LogOut, UserRound } from 'lucide-react'
+import { ChefHat, LayoutDashboard, LogOut, UserRound } from 'lucide-react'
 import { NavLink } from 'react-router'
 import { useAuth } from '@/hooks/useAuth'
 import type { Staff } from '@/types/domain'
@@ -37,6 +37,14 @@ export function StaffTopBar({ staff }: { staff: Staff }) {
               }
             >
               <ChefHat size={15} aria-hidden="true" /> Cocina
+            </NavLink>
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${isActive ? 'bg-brand-500 text-white' : 'text-stone-300 hover:bg-stone-700'}`
+              }
+            >
+              <LayoutDashboard size={15} aria-hidden="true" /> Admin
             </NavLink>
           </nav>
         )}

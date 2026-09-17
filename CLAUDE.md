@@ -17,9 +17,10 @@ Menú digital interactivo para restaurantes (QR en mesa). Una sola SPA con tres 
 | **Cocina (KDS)** | cocineros | tarjetas de comandas aprobadas con tiempo transcurrido, color por urgencia y notas resaltadas; marca como listo |
 
 Modelo de negocio decidido: **SaaS multi-restaurante** (una app, una base Supabase, cada restaurante con su `slug`).
-Estado actual: **Fases 0–3 completadas**. Backend en Supabase (dev) y frontend conectado: comensal, mozo y cocina
-operan sobre datos reales; el tenant demo funciona sin login; el personal real inicia sesión y opera su propio
-restaurante con roles y mesas asignadas. Falta admin (Fase 5) y entrega (Fase 6).
+Estado actual: **Fases 0–5 completadas**. Backend en Supabase (dev) y frontend conectado de punta a punta: comensal,
+mozo, cocina y ahora **administración** (menú con variantes, mesas/QR, personal e invitaciones, configuración)
+operan sobre datos reales; el tenant demo (`/demo/*`, incluido `/demo/admin`) funciona sin login para mostrar las
+cuatro vistas a un prospecto. Falta la entrega (Fase 6: PWA, sonido, CI, deploy).
 
 ## 2. Stack
 
@@ -47,6 +48,11 @@ npm run db:types        # regenera src/types/database.ts desde el proyecto (corr
 npm run db:verify       # node scripts/verify-rls.mjs — 21 checks de RLS/RPC con la anon key
 npm run db:verify:staff # node scripts/verify-staff-ops.mjs — 7 checks de close_table_session y aislamiento por tenant
 ```
+
+> **Storage** (Fase 5): bucket público `restaurant-media` (`supabase/migrations/20260918000100_storage_media.sql`),
+> ruta `<restaurantId>/<logo|menu>/<archivo>`. RLS de `storage.objects` autoriza escritura con
+> `can_manage((storage.foldername(name))[1]::uuid)` — el primer segmento de la ruta ES el tenant; nunca subir a una
+> ruta que no empiece con el `restaurant_id` del usuario. Verificado en vivo (demo permite subir, `bar-prueba` no).
 
 Antes de cerrar cualquier cambio: `lint`, `typecheck`, `test` y `build` en verde; si tocaste SQL, además `db:push`, `db:types` y ambos `db:verify*`.
 
@@ -87,14 +93,16 @@ Nunca commitear valores. Nunca poner secretos en código.
 /registro                  "Tengo un código" (join_restaurant) o "Crear mi restaurante" (create_restaurant)
 /mozo                      STAFF real: StaffLayout(allowedRoles=['waiter']) → WaiterView
 /cocina                    STAFF real: StaffLayout(allowedRoles=['kitchen']) → KitchenView
+/admin/menu·mesas·personal·configuracion   STAFF real: StaffLayout(allowedRoles=[]) → AdminLayout (sólo owner/admin pasan)
+/demo/admin/…              las mismas 4 páginas de admin sobre el tenant demo, sin login
 *                          404 (app/RouteError)
-(Fase 5+)                  /admin
 ```
 
 Las vistas se cargan con `React.lazy` (un chunk por rol). `RootLayout` provee `QueryClientProvider` + `AuthProvider` + `ToastProvider` + `Suspense` + `OfflineBanner`.
-`DemoLayout` carga el restaurante `demo` por slug (sin auth), lo publica en `RestaurantScopeContext` con `staffId: null, role: null`, suscribe realtime y renderiza `DemoBar`.
-`StaffLayout` exige sesión real (si no, `<Navigate to="/login" state={{from}}>`), resuelve `staff` del usuario (`useMyStaff`), valida rol (owner/admin siempre pasan; si no, `allowedRoles`) y publica el scope con `staffId`/`role` reales; renderiza `StaffTopBar` (nombre, rol, cerrar sesión, y para owner/admin un switch Mozo↔Cocina) en vez de `DemoBar`.
-`WaiterView`/`KitchenView` son agnósticos de demo-vs-real: sólo leen `useRestaurantScope()`, nunca `useAuth()` directo. `--topbar-h` sólo lo usa `ClientView` (comensal bajo `DemoBar`); las vistas de staff no lo necesitan.
+`DemoLayout` carga el restaurante `demo` por slug (sin auth), lo publica en `RestaurantScopeContext` con `staffId: null, role: null`, suscribe realtime y renderiza `DemoBar` (4 tabs: Cliente/Mozo/Cocina/Admin).
+`StaffLayout` exige sesión real (si no, `<Navigate to="/login" state={{from}}>`), resuelve `staff` del usuario (`useMyStaff`), valida rol (owner/admin siempre pasan; si no, `allowedRoles`) y publica el scope con `staffId`/`role` reales; renderiza `StaffTopBar` (nombre, rol, cerrar sesión, y para owner/admin un switch Mozo↔Cocina↔Admin) en vez de `DemoBar`. Pasar `allowedRoles={[]}` (como en `/admin`) restringe la ruta a owner/admin exclusivamente.
+`WaiterView`/`KitchenView`/`AdminLayout` (y sus páginas) son agnósticos de demo-vs-real: sólo leen `useRestaurantScope()`, nunca `useAuth()` directo. `--topbar-h` sólo lo usa `ClientView` (comensal bajo `DemoBar`); las vistas de staff no lo necesitan.
+`AdminLayout` usa **tabs horizontales**, no una sidebar clásica: es una desviación deliberada del plan original para cumplir la regla mobile-first (funciona a 360px); ver §6.
 
 ## 4. Estructura
 
@@ -126,11 +134,18 @@ src/
 │   ├── staff.ts                 # fetchMyStaff(userId) (+ restaurante embebido), fetchMyAssignments(staffId)
 │   ├── auth.ts                  # getSession, onAuthStateChange, signIn/signUp/signOut, resendSignupEmail, joinRestaurant, createRestaurant (RPCs)
 │   ├── realtime.ts              # subscribeToRestaurant(rid, onChange) — postgres_changes filtrados por restaurant_id
-│   └── demo.ts                  # DEMO_SLUG, DEMO_TABLE_TOKEN, DEMO_CLIENT_PATH, resetDemo
+│   ├── demo.ts                  # DEMO_SLUG, DEMO_TABLE_TOKEN, DEMO_CLIENT_PATH, resetDemo
+│   ├── menuAdmin.ts             # CRUD categorías/platos/grupos/opciones + setItemAvailable, setSoldOutToday, updateItemPrice
+│   ├── tablesAdmin.ts           # CRUD sectores/mesas (fetchAdminTables trae el token); setTableActive (soft delete)
+│   ├── staffAdmin.ts            # fetchStaffList, updateStaffRole, setStaffActive; invitaciones; fetchAllAssignments/replaceAssignments
+│   ├── settingsAdmin.ts         # updateRestaurantSettings, currentBrand(restaurant)
+│   └── media.ts                 # uploadRestaurantMedia(restaurantId, 'logo'|'menu', file) → URL pública (Storage)
 ├── hooks/
 │   ├── useQueries.ts            # useRestaurantBySlug, useTableByToken, useMenu, useSessionState (polling 8 s), useActiveOrders, useOpenAlerts, useTablesOverview, useMyAssignments, useMyStaff, useRealtimeInvalidation
 │   ├── useStaffMutations.ts     # setStatus / editItems / resolve / closeSession con invalidación de ['staff', rid] y toast de error
+│   ├── useAdminQueries.ts, useAdminMutations.ts  # todo lo de /admin; las mutaciones invalidan qk.admin(rid) en bloque
 │   ├── useAuth.ts               # consume AuthContext (session, userId, loading, signOut)
+│   ├── useQrDataUrl.ts          # data URL de un QR (librería `qrcode`), memoizado por texto
 │   ├── useToast.ts, useFocusTrap.ts
 ├── components/ui/               # primitivos sin dependencia de datos
 │   ├── Modal.tsx (Modal + Sheet), ConfirmDialog.tsx, Button.tsx, QtyControl.tsx, EmptyState.tsx, PageSpinner.tsx
@@ -148,11 +163,16 @@ src/
     │   └── pendingSetup.ts      # guarda en localStorage qué hacer (canjear código / crear restaurante) para completarlo cuando vuelve del link de confirmación de email
     ├── staff/
     │   ├── restaurant-scope-context.ts, useRestaurantScope  # { restaurant, staffId, role } — null/null en la demo
-    │   ├── StaffLayout.tsx, StaffTopBar.tsx, roleHome.ts     # guard real de /mozo y /cocina
+    │   ├── StaffLayout.tsx, StaffTopBar.tsx, roleHome.ts     # guard real de /mozo, /cocina y /admin
     ├── waiter/    WaiterView (tabs Pedidos/Mesas; alertas · entrantes · listos para entregar · en cocina), AlertsPanel, OrderCard,
     │              OrderEditModal, TablesOverview (grilla de mesas + "Cerrar mesa"), assignmentFilter.ts (puro, testeado)
     ├── kitchen/   KitchenView, KitchenTicket, urgency.ts
-    ├── demo/      DemoLayout, DemoBar (NavLinks + badges + reset_demo)
+    ├── admin/     AdminLayout (tabs Menú/Mesas/Personal/Configuración) + adminNav.ts
+    │              AdminMenuPage (categorías + platos, precio/visible/agotado inline) · ItemEditModal + OptionGroupEditor (variantes)
+    │              AdminTablesPage (sectores + mesas + QR, hoja para imprimir con print:) · QrCode.tsx
+    │              AdminStaffPage (equipo, invitaciones, asignación de mozos por sector/mesa)
+    │              AdminSettingsPage (nombre, logo, color de marca, moneda) · ImageUploadField.tsx (URL o subida a Storage)
+    ├── demo/      DemoLayout, DemoBar (NavLinks + badges + reset_demo; 4 tabs incl. Admin)
     └── landing/   LandingPage
 ```
 
@@ -213,6 +233,26 @@ Cualquier función de autorización nueva (booleana, usada en `if not ... then r
 
 **Mesas** (`TablesOverview`, pestaña del mozo): `fetchTablesOverview(restaurantId)` junta `tables` + `table_sessions` abiertas + suma de `orders.total` (no cancelados) por sesión, agrupadas por sector. "Cerrar mesa" llama `close_table_session`; se deshabilita preventivamente con `TableOverview.canClose` (mismo dato que ya trae `useActiveOrders`) y la RPC vuelve a validarlo server-side.
 
+## 5d. Administración (Fase 5)
+
+**Patrón general:** cada página de `/admin` es CRUD directo contra Postgres vía `supabase-js` (no hay RPCs nuevas: las políticas `*_write_manager` de `can_manage` ya alcanzan). Las mutaciones (`hooks/useAdminMutations.ts`) invalidan `qk.admin(restaurantId)` **en bloque** al terminar — no hay invalidación selectiva por sub-sección, así que cualquier cambio (menú, mesas, personal) refresca las cuatro páginas del admin. Todas las ediciones simples (precio, nombre de una opción, etc.) persisten solas al perder el foco (`onBlur`) o al tocar un switch — no hay un botón "Guardar" general salvo en el formulario base del plato y en Configuración.
+
+**Menú** (`AdminMenuPage` + `ItemEditModal` + `OptionGroupEditor`):
+- Categorías: alta/orden (flechas ▲▼ intercambian `sort_order` con la vecina)/ocultar/eliminar. **Eliminar una categoría con platos está bloqueado en la UI** (el botón se deshabilita) porque `menu_items.category_id` tiene `on delete cascade` — borrarla se llevaría los platos. Ocultarla (`is_active=false`) es la vía segura.
+- Platos: precio editable inline en la lista (input en la moneda del restaurante, no en centavos; se redondea con `Math.round(valor*100)` al guardar). "Visible"/"Oculto" = `is_available`. El ícono de prohibido = "agotado hoy" (`sold_out_until = hoy`, se limpia solo al otro día). Eliminar un plato SÍ es seguro (`order_items.menu_item_id on delete set null`: el historial conserva el `name_snapshot`).
+- `ItemEditModal`: para un plato **nuevo**, primero hay que "Guardar" los datos base (crea la fila y devuelve el id) antes de poder agregarle variantes — el editor de grupos/opciones necesita un `menu_item_id` real. Una vez guardado, el botón pasa de "Cancelar" a "Listo".
+- `OptionGroupEditor` no recibe los grupos por props: los lee de `useAdminMenuItems(restaurantId)` (el mismo query de la lista) buscando el item por id, así que se actualiza solo después de cada mutación sin lógica de refetch propia. **Si alguna vez se separa esta consulta, hay que replicar esa reactividad a mano.**
+
+**Mesas y sectores** (`AdminTablesPage`): sectores con alta/baja simple (`tables.sector_id on delete set null`: borrar un sector no rompe nada). Mesas con alta y reasignación de sector; **"desactivar" en vez de eliminar** (`tables` no tiene delete en la UI) porque `orders.table_id on delete cascade` se llevaría puesto todo el historial de esa mesa. El QR se genera client-side con `qrcode` a partir de `${origin}/r/${slug}/m/${token}`; "Descargar" baja un PNG de 512px, la hoja para imprimir es una segunda copia del contenido con clases `hidden print:block` (oculta en pantalla, visible sólo en `window.print()` — por eso en jsdom/tests el texto de cada mesa aparece dos veces, ver `admin.test.tsx`).
+
+**Personal** (`AdminStaffPage`): el equipo no incluye email (no está en `staff`, sólo en `auth.users`, que el frontend no puede leer con la anon key). El rol `owner` nunca se asigna desde acá (se define una sola vez en `create_restaurant`); el selector de rol lo excluye y las filas `owner` no tienen selector. Un mozo no puede editar su propio rol ni desactivarse (comparación `s.id === staffId` del scope). Invitaciones: `createInvite` inserta en `staff_invites` (la base genera el código); se muestra una sola vez destacado con botón de copiar, y queda listado con `timeUntil(expiresAt)` (**no `timeAgo`**: es una fecha futura — confundir los dos fue un bug real de esta fase, ver abajo). La asignación de sectores/mesas de un mozo (`AssignmentEditor`, expandible por fila) llama `replaceAssignments`: borra todas sus filas de `waiter_assignments` y reinserta la selección actual.
+
+**Configuración** (`AdminSettingsPage`): nombre/tagline/logo/moneda/color, todo en un único "Guardar" (`updateRestaurantSettings`). El color se guarda como `theme.brand` (jsonb) — pisa cualquier otra clave de `theme` que hubiera (no hay más claves usadas todavía). Al guardar, además de `qk.admin`, se invalidan `['my-staff']` y `['restaurant-by-slug']` para que el cambio se vea también en el `StaffTopBar`/`DemoBar` y en la vista del comensal sin recargar.
+
+**Storage**: `ImageUploadField` (reusado en el plato y en Configuración) sube a `restaurant-media/<restaurantId>/<logo|menu>/<uid>.<ext>` y llena la URL sola; el campo URL sigue editable a mano para quien prefiera pegar un link externo.
+
+> **Bug real de esta fase:** mostré el vencimiento de una invitación (fecha futura) con `timeAgo` (diseñado para el pasado: clampea a `recién`) y decía "vence recién" para algo que vencía en 7 días. Se detectó probando en vivo, no por inspección — se agregó `timeUntil` a `lib/format.ts` (con tests) para fechas futuras. **Regla:** `timeAgo` es sólo para el pasado; cualquier fecha futura (vencimientos, próximos turnos, etc.) usa `timeUntil`.
+
 ## 6. Convenciones
 
 - **Idioma:** UI, comentarios, commits y docs en **español** (voseo en UI: "Agregá", "Probá").
@@ -225,7 +265,8 @@ Cualquier función de autorización nueva (booleana, usada en `if not ... then r
 - **Botones:** usar `<Button>` salvo controles muy específicos (chips, barra flotante, tabs). Nunca sobreescribir el color de una variante con `className`: crear variante.
 - **Colores:** `brand-*` (naranja) para marca. Semánticos: emerald = OK/enviar, amber = pendiente, red = urgente/alerta, sky = cuenta/en cocina, yellow = notas de cocina.
 - **z-index:** barra demo 40, filtros sticky 30, botón carrito 40, modales 50 (portal a `body`), toast 60.
-- **Tiempo:** nunca `Date.now()` en render; `useNow(intervalo)` y pasar `now` por props.
+- **Tiempo:** nunca `Date.now()` en render; `useNow(intervalo)` y pasar `now` por props. `timeAgo` = pasado, `timeUntil` = futuro — no mezclar (ver §5d).
+- **Navegación admin/staff:** tabs horizontales, no sidebar — decisión deliberada por la regla mobile-first (`AdminLayout` es la referencia si hace falta otra pantalla con navegación por secciones).
 - **Accesibilidad mínima:** `aria-label` en botones de ícono, `aria-hidden` en íconos decorativos, `role="dialog"` + `aria-modal` + `aria-labelledby` en diálogos, `role="status"` para toasts.
 - **Tests:** utilidades y reducers con tests unitarios; vistas con smoke vía `createMemoryRouter(routes)`. Ejecutar `npm test` antes de commitear.
 - **Auth:** nunca `supabase.auth.*` directo en un componente — pasa por `services/auth.ts` y `useAuth()`. Guards de ruta (`StaffLayout`) devuelven UI (`<Navigate>` o mensaje), nunca lanzan.
@@ -236,9 +277,9 @@ Cualquier función de autorización nueva (booleana, usada en `if not ... then r
 - [x] **Fase 0** — TS, react-router, `components/ui`, precios en centavos, Vitest, hooks separados
 - [x] **Fase 1** — Supabase: esquema, RLS, RPCs, seed del tenant demo, tipos generados, `db:verify` (21 checks)
 - [x] **Fase 2** — Cliente conectado: `/r/:slug/m/:token`, menú desde DB, variantes (ItemOptionsSheet), `place_order`, Mis pedidos / La cuenta, mozo y cocina sobre Supabase con realtime
-- [x] **Fase 3** — Auth (login/registro, confirmación de email), `StaffLayout` con guard por rol, `/mozo` y `/cocina` reales, filtro por asignación de mozo, pestaña Mesas + `close_table_session`, `db:verify:staff` (7 checks). **Pendiente de esta fase:** UI para generar invitaciones y asignar sectores/mesas (se hace en Fase 5 → Personal); verificación end-to-end del login real (bloqueada por confirmación de email — ver §5c y el mensaje de cierre de fase)
-- [ ] **Fase 4** — (fusionada con la Fase 2/5) el editor de variantes en el admin queda en Fase 5
-- [ ] **Fase 5** — Panel admin simple (precios, agotado hoy, mesas/QR, personal → invitaciones y asignación de mozos, configuración)
+- [x] **Fase 3** — Auth (login/registro, confirmación de email), `StaffLayout` con guard por rol, `/mozo` y `/cocina` reales, filtro por asignación de mozo, pestaña Mesas + `close_table_session`, `db:verify:staff` (7 checks)
+- [x] **Fase 4** — fusionada: el editor de variantes vive en `ItemEditModal`/`OptionGroupEditor` (Fase 5)
+- [x] **Fase 5** — Panel admin (`/admin`, y `/demo/admin` sin login): menú con precio/visible/agotado hoy inline + variantes, mesas/sectores con QR descargable y hoja para imprimir, personal (roles, invitaciones, asignación de mozos), configuración (nombre/logo/color/moneda) con subida de imágenes a Storage. 59 tests, todo verificado en vivo contra el tenant demo (crear plato con variantes → aparece en el menú real del comensal; cerrar mesa; cambiar el color y verlo propagarse a `StaffTopBar`/`DemoBar`/comensal). **Pendiente de esta fase:** verificación end-to-end del login real de un mozo/admin de carne y hueso (bloqueada por confirmación de email, igual que en la Fase 3 — ver §5c)
 - [ ] **Fase 6** — Sonido, PWA/wake lock, landing, CI, deploy Vercel, docs de operación
 
 Fuera de alcance del MVP: pagos online, impresión térmica, facturación de suscripciones, reportes, app nativa.
