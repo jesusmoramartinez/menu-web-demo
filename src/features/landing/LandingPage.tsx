@@ -7,13 +7,13 @@ const ROLES = [
     to: DEMO_CLIENT_PATH,
     Icon: Smartphone,
     title: 'Cliente',
-    text: 'Escanea el QR de la mesa, elige, agrega notas y pide sin esperar al mozo.',
+    text: 'Escaneá el QR de la mesa, elegí, agregá notas y pedí sin esperar al mozo.',
   },
   {
     to: '/demo/mozo',
     Icon: UserRound,
     title: 'Mozo',
-    text: 'Recibe llamados y comandas en el celular, las revisa y las manda a cocina.',
+    text: 'Recibí llamados y comandas en el celular, revisalas y mandalas a cocina.',
   },
   {
     to: '/demo/cocina',
@@ -79,7 +79,7 @@ export default function LandingPage() {
           </div>
           <p className="mt-4 text-sm text-stone-500">
             ¿Preferís hablar antes?{' '}
-            <a href="mailto:hola@ejemplo.com?subject=Menú%20Digital" className="font-semibold text-brand-700 hover:underline">
+            <a href="mailto:jesusmoramartinez2003@gmail.com?subject=Menú%20Digital" className="font-semibold text-brand-700 hover:underline">
               Escribinos
             </a>
             .

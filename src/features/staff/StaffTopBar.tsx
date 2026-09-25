@@ -2,7 +2,7 @@ import { useMutation } from '@tanstack/react-query'
 import { ChefHat, LayoutDashboard, LogOut, UserRound } from 'lucide-react'
 import { NavLink } from 'react-router'
 import { useAuth } from '@/hooks/useAuth'
-import type { Staff } from '@/types/domain'
+import type { Restaurant, Staff } from '@/types/domain'
 
 const ROLE_LABEL: Record<Staff['role'], string> = {
   owner: 'Dueño/a',
@@ -11,8 +11,8 @@ const ROLE_LABEL: Record<Staff['role'], string> = {
   kitchen: 'Cocina',
 }
 
-/** Barra superior de las rutas reales de staff: navegación entre pantallas + cerrar sesión. */
-export function StaffTopBar({ staff }: { staff: Staff }) {
+/** Barra superior de las rutas reales de staff: marca del restaurante, navegación entre pantallas + cerrar sesión. */
+export function StaffTopBar({ staff, restaurant }: { staff: Staff; restaurant: Restaurant }) {
   const { signOut } = useAuth()
   const logout = useMutation({ mutationFn: signOut })
   const canSeeBoth = staff.role === 'owner' || staff.role === 'admin'
@@ -20,6 +20,17 @@ export function StaffTopBar({ staff }: { staff: Staff }) {
   return (
     <div className="sticky top-0 z-40 bg-stone-900 text-white shadow-md">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-3 py-2">
+        <div className="hidden min-w-0 items-center gap-2 sm:flex">
+          {restaurant.logoUrl ? (
+            <img src={restaurant.logoUrl} alt="" className="h-8 w-8 shrink-0 rounded-lg bg-white/90 object-cover" />
+          ) : (
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-500 text-sm font-bold" aria-hidden="true">
+              {restaurant.name.charAt(0).toUpperCase()}
+            </span>
+          )}
+          <span className="truncate font-bold">{restaurant.name}</span>
+        </div>
+
         {canSeeBoth && (
           <nav className="flex gap-1 rounded-xl bg-stone-800 p-1" aria-label="Vistas">
             <NavLink

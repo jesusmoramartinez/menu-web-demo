@@ -4,7 +4,9 @@ import { Link, Navigate, Outlet, useLocation } from 'react-router'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { PageSpinner } from '@/components/ui/PageSpinner'
 import { useAuth } from '@/hooks/useAuth'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useMyStaff, useRealtimeInvalidation } from '@/hooks/useQueries'
+import { brandStyle } from '@/lib/brandStyle'
 import type { StaffRole } from '@/types/domain'
 import { RestaurantScopeContext } from './restaurant-scope-context'
 import { roleHome } from './roleHome'
@@ -29,6 +31,7 @@ export function StaffLayout({ allowedRoles }: StaffLayoutProps) {
   const location = useLocation()
   const myStaff = useMyStaff(userId)
   useRealtimeInvalidation(myStaff.data?.restaurant.id)
+  useDocumentTitle(myStaff.data ? `${myStaff.data.restaurant.name} · Menú Digital` : undefined)
 
   if (loading) return <PageSpinner label="Verificando sesión…" />
   if (!session) return <Navigate to="/login" replace state={{ from: location.pathname }} />
@@ -88,10 +91,12 @@ export function StaffLayout({ allowedRoles }: StaffLayoutProps) {
 
   return (
     <RestaurantScopeContext.Provider value={{ restaurant, staffId: staff.id, role: staff.role }}>
-      <StaffTopBar staff={staff} />
-      <Suspense fallback={<PageSpinner />}>
-        <Outlet />
-      </Suspense>
+      <div style={brandStyle(restaurant.theme.brand)}>
+        <StaffTopBar staff={staff} restaurant={restaurant} />
+        <Suspense fallback={<PageSpinner />}>
+          <Outlet />
+        </Suspense>
+      </div>
     </RestaurantScopeContext.Provider>
   )
 }

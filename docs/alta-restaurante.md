@@ -18,8 +18,8 @@ el proyecto de producción (ver `docs/deploy.md`); sirve igual contra dev para p
 2. Cargar los platos: nombre, descripción, precio, foto (subida a Storage o URL externa), tags.
 3. Para platos con variantes (tamaño, extras): agregar los grupos de opciones desde el editor del plato
    (`ItemEditModal` → hay que guardar los datos base primero para poder agregarle grupos).
-4. Confirmar en `/demo/m/...` — no, en la mesa real una vez creada (paso siguiente) — que el menú se ve bien
-   desde el celular.
+4. Confirmar que el menú se ve bien desde el celular en la mesa real (una vez creada, paso siguiente) —
+   no hace falta revisarlo antes en `/demo/m/...`, ese tenant es sólo para mostrarle la app a un prospecto.
 
 ## 3. Mesas y sectores (`/admin/mesas`)
 

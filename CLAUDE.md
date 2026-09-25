@@ -17,21 +17,24 @@ Menú digital interactivo para restaurantes (QR en mesa). Una sola SPA con tres 
 | **Cocina (KDS)** | cocineros | tarjetas de comandas aprobadas con tiempo transcurrido, color por urgencia y notas resaltadas; marca como listo |
 
 Modelo de negocio decidido: **SaaS multi-restaurante** (una app, una base Supabase, cada restaurante con su `slug`).
-Estado actual: **Fases 0–6 completadas** (producto listo para vender, falta sólo desplegar a producción y dar de
-alta el primer cliente real). Backend en Supabase (dev) y frontend conectado de punta a punta: comensal, mozo,
-cocina y **administración** (menú con variantes, mesas/QR, personal e invitaciones, configuración) operan sobre
-datos reales; el tenant demo (`/demo/*`, incluido `/demo/admin`) funciona sin login para mostrar las cuatro
-vistas a un prospecto. La app es instalable como **PWA**, mozo/cocina tienen aviso sonoro + vibración y la
-cocina tiene Wake Lock + pantalla completa para tablets. Hay CI (`.github/workflows/ci.yml`) y docs de
-operación en `docs/` (`deploy.md`, `alta-restaurante.md`, `manual-mozo-cocina.md`). **Pendiente real, fuera de
-código:** crear el proyecto Supabase de producción y desplegar a Vercel (ver `docs/deploy.md`) — son acciones
-externas que requieren decisión y credenciales del usuario, no se hacen desde acá sin que lo pida explícitamente.
+Estado actual: **Fases 0–6 completadas y la demo ya está desplegada en Vercel**, apuntando al proyecto Supabase
+de **desarrollo** (`oopowxlxpwsjpmpyuckm`) — no hay todavía un proyecto Supabase separado de producción. Backend
+en Supabase (dev) y frontend conectado de punta a punta: comensal, mozo, cocina y **administración** (menú con
+variantes, mesas/QR, personal e invitaciones, configuración) operan sobre datos reales; el tenant demo
+(`/demo/*`, incluido `/demo/admin`) funciona sin login para mostrar las cuatro vistas a un prospecto. La app es
+instalable como **PWA**, mozo/cocina tienen aviso sonoro + vibración y la cocina tiene Wake Lock + pantalla
+completa para tablets. Hay CI (`.github/workflows/ci.yml`) y docs de operación en `docs/` (`deploy.md`,
+`alta-restaurante.md`, `manual-mozo-cocina.md`). **Pendiente real, fuera de código:** crear el proyecto Supabase
+de producción y migrar Vercel a esas credenciales antes de dar de alta el primer cliente real (ver
+`docs/deploy.md`) — mientras compartan proyecto, el `pg_cron` de `reset_demo()` y el tenant "Bar de Prueba" del
+seed corren sobre la misma base que sirve la demo pública. Son acciones externas que requieren decisión y
+credenciales del usuario, no se hacen desde acá sin que lo pida explícitamente.
 
 ## 2. Stack
 
 - **React 19** + **Vite 8** + **TypeScript** (strict, `verbatimModuleSyntax`, alias `@/` → `src/`)
 - **Tailwind CSS 4** vía `@tailwindcss/vite` (tokens en `src/index.css` con `@theme`; no hay `tailwind.config.js`)
-- **react-router 7** (`createBrowserRouter`, rutas en `src/app/router.tsx`)
+- **react-router 8** (`createBrowserRouter`, rutas en `src/app/router.tsx`)
 - **lucide-react** para iconos
 - **Supabase** (Postgres + Auth + Realtime) con `@supabase/supabase-js`; la CLI (`supabase`, devDependency) está
   **vinculada al proyecto de desarrollo** `oopowxlxpwsjpmpyuckm`. No hay Docker en esta máquina: se trabaja
@@ -104,8 +107,8 @@ Nunca commitear valores. Nunca poner secretos en código.
 ```
 
 Las vistas se cargan con `React.lazy` (un chunk por rol). `RootLayout` provee `QueryClientProvider` + `AuthProvider` + `ToastProvider` + `Suspense` + `OfflineBanner`.
-`DemoLayout` carga el restaurante `demo` por slug (sin auth), lo publica en `RestaurantScopeContext` con `staffId: null, role: null`, suscribe realtime y renderiza `DemoBar` (4 tabs: Cliente/Mozo/Cocina/Admin).
-`StaffLayout` exige sesión real (si no, `<Navigate to="/login" state={{from}}>`), resuelve `staff` del usuario (`useMyStaff`), valida rol (owner/admin siempre pasan; si no, `allowedRoles`) y publica el scope con `staffId`/`role` reales; renderiza `StaffTopBar` (nombre, rol, cerrar sesión, y para owner/admin un switch Mozo↔Cocina↔Admin) en vez de `DemoBar`. Pasar `allowedRoles={[]}` (como en `/admin`) restringe la ruta a owner/admin exclusivamente.
+`DemoLayout` carga el restaurante `demo` por slug (sin auth), lo publica en `RestaurantScopeContext` con `staffId: null, role: null`, suscribe realtime, aplica el tema de marca (`lib/brandStyle.ts`) y el título de pestaña (`useDocumentTitle`), y renderiza `DemoBar` (4 tabs: Cliente/Mozo/Cocina/Admin).
+`StaffLayout` exige sesión real (si no, `<Navigate to="/login" state={{from}}>`), resuelve `staff` del usuario (`useMyStaff`), valida rol (owner/admin siempre pasan; si no, `allowedRoles`) y publica el scope con `staffId`/`role` reales; aplica el tema de marca y el título de pestaña igual que `DemoLayout`; renderiza `StaffTopBar` (logo/nombre del restaurante en ≥sm, rol, cerrar sesión, y para owner/admin un switch Mozo↔Cocina↔Admin) en vez de `DemoBar`. Pasar `allowedRoles={[]}` (como en `/admin`) restringe la ruta a owner/admin exclusivamente.
 `WaiterView`/`KitchenView`/`AdminLayout` (y sus páginas) son agnósticos de demo-vs-real: sólo leen `useRestaurantScope()`, nunca `useAuth()` directo. `--topbar-h` sólo lo usa `ClientView` (comensal bajo `DemoBar`); las vistas de staff no lo necesitan.
 `AdminLayout` usa **tabs horizontales**, no una sidebar clásica: es una desviación deliberada del plan original para cumplir la regla mobile-first (funciona a 360px); ver §6.
 
@@ -129,6 +132,7 @@ src/
 │   ├── queryKeys.ts             # qk.*: todo lo del staff cuelga de ['staff', restaurantId]
 │   ├── errors.ts                # toAppError: códigos de las RPCs → mensajes en español
 │   ├── format.ts                # formatPrice(cents, currency, locale), timeAgo, minutesSince, sumLines, countUnits, plural
+│   ├── brandStyle.ts            # variables --color-brand-* (color-mix) desde restaurant.theme.brand; la usan ClientLayout, StaffLayout y DemoLayout
 │   ├── uid.ts, useNow.ts
 ├── services/                    # funciones puras sobre supabase-js; mapean filas → dominio. SE MOCKEAN en tests.
 │   ├── restaurants.ts           # fetchRestaurantBySlug, toRestaurant
@@ -151,13 +155,14 @@ src/
 │   ├── useAdminQueries.ts, useAdminMutations.ts  # todo lo de /admin; las mutaciones invalidan qk.admin(rid) en bloque
 │   ├── useAuth.ts               # consume AuthContext (session, userId, loading, signOut)
 │   ├── useQrDataUrl.ts          # data URL de un QR (librería `qrcode`), memoizado por texto
+│   ├── useDocumentTitle.ts      # pone `document.title` mientras el componente está montado y restaura el anterior al desmontar
 │   ├── useToast.ts, useFocusTrap.ts
 ├── components/ui/               # primitivos sin dependencia de datos
 │   ├── Modal.tsx (Modal + Sheet), ConfirmDialog.tsx, Button.tsx, QtyControl.tsx, EmptyState.tsx, PageSpinner.tsx
 │   ├── Skeleton.tsx (MenuSkeleton, CardsSkeleton), ErrorState.tsx, OfflineBanner.tsx, ToastProvider.tsx + toast-context.ts
 └── features/
     ├── client/
-    │   ├── ClientLayout.tsx     # ruta: resuelve token → skeleton / error / "Mesa no encontrada" / ClientProvider + tema de marca (brandStyle.ts)
+    │   ├── ClientLayout.tsx     # ruta: resuelve token → skeleton / error / "Mesa no encontrada" / ClientProvider + tema de marca (lib/brandStyle.ts) + título de pestaña
     │   ├── ClientProvider.tsx   # sesión efectiva (mesa abierta en servidor ?? última local) + carrito, persistidos por token
     │   ├── client-context.ts, useClient.ts, cartReducer.ts (puro, testeado), optionRules.ts (puro, testeado)
     │   ├── ClientView.tsx       # tabs Menú / Mis pedidos, filtros, carrito flotante, alertas, ThanksScreen si la sesión se cerró
@@ -168,7 +173,7 @@ src/
     │   └── pendingSetup.ts      # guarda en localStorage qué hacer (canjear código / crear restaurante) para completarlo cuando vuelve del link de confirmación de email
     ├── staff/
     │   ├── restaurant-scope-context.ts, useRestaurantScope  # { restaurant, staffId, role } — null/null en la demo
-    │   ├── StaffLayout.tsx, StaffTopBar.tsx, roleHome.ts     # guard real de /mozo, /cocina y /admin
+    │   ├── StaffLayout.tsx, StaffTopBar.tsx, roleHome.ts     # guard real de /mozo, /cocina y /admin; aplica tema de marca y título de pestaña; StaffTopBar muestra logo/nombre del restaurante (oculto <sm)
     ├── waiter/    WaiterView (tabs Pedidos/Mesas; alertas · entrantes · listos para entregar · en cocina; SoundToggle + useNewItemsAlert), AlertsPanel, OrderCard,
     │              OrderEditModal, TablesOverview (grilla de mesas + "Cerrar mesa"), assignmentFilter.ts (puro, testeado)
     ├── kitchen/   KitchenView (SoundToggle + useNewItemsAlert, useWakeLock siempre activo, useFullscreen para modo kiosco), KitchenTicket, urgency.ts

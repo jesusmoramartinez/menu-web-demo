@@ -2,20 +2,23 @@ import { Suspense, type CSSProperties } from 'react'
 import { Outlet } from 'react-router'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { PageSpinner } from '@/components/ui/PageSpinner'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useRealtimeInvalidation, useRestaurantBySlug } from '@/hooks/useQueries'
+import { brandStyle } from '@/lib/brandStyle'
 import { DEMO_SLUG } from '@/services/demo'
 import { RestaurantScopeContext } from '@/features/staff/restaurant-scope-context'
 import { DemoBar } from './DemoBar'
 import { useAutoResetDemo } from './useAutoResetDemo'
 
 /** Altura de la barra de la demo, para que los sticky de las vistas se apilen debajo. */
-const layoutStyle = { '--topbar-h': '52px' } as CSSProperties
+const TOPBAR_STYLE = { '--topbar-h': '52px' } as CSSProperties
 
 /** Envuelve las vistas de la demo con el restaurante demo (sin login) y la barra de roles. */
 export function DemoLayout() {
   const query = useRestaurantBySlug(DEMO_SLUG)
   useRealtimeInvalidation(query.data?.id)
   useAutoResetDemo(query.data)
+  useDocumentTitle(query.data ? `${query.data.name} · Menú Digital` : undefined)
 
   if (query.isPending) return <PageSpinner label="Cargando la demo…" />
   if (query.isError) {
@@ -36,7 +39,7 @@ export function DemoLayout() {
 
   return (
     <RestaurantScopeContext.Provider value={{ restaurant: query.data, staffId: null, role: null }}>
-      <div style={layoutStyle}>
+      <div style={{ ...TOPBAR_STYLE, ...brandStyle(query.data.theme.brand) }}>
         <DemoBar />
         <Suspense fallback={<PageSpinner />}>
           <Outlet />

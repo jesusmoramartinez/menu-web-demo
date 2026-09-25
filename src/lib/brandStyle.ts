@@ -2,7 +2,12 @@ import type { CSSProperties } from 'react'
 
 const HEX = /^#[0-9a-f]{6}$/i
 
-/** Variables de marca para que `bg-brand-*` tome el color del restaurante (derivando tonos con color-mix). */
+/**
+ * Variables de marca para que `bg-brand-*` tome el color del restaurante (derivando tonos
+ * con color-mix). Se usa tanto en la vista del comensal (`ClientLayout`) como en las de
+ * staff (`StaffLayout`, `DemoLayout`) para que el color elegido en Configuración se vea
+ * en las cuatro vistas, no sólo en la del cliente.
+ */
 export function brandStyle(brand: string | undefined): CSSProperties | undefined {
   if (!brand || !HEX.test(brand)) return undefined
   return {

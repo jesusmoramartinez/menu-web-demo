@@ -2,8 +2,9 @@ import { QrCode } from 'lucide-react'
 import { Link, useParams } from 'react-router'
 import { ErrorState } from '@/components/ui/ErrorState'
 import { MenuSkeleton, Skeleton } from '@/components/ui/Skeleton'
+import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useTableByToken } from '@/hooks/useQueries'
-import { brandStyle } from './brandStyle'
+import { brandStyle } from '@/lib/brandStyle'
 import { ClientProvider } from './ClientProvider'
 import ClientView from './ClientView'
 
@@ -18,6 +19,7 @@ export default function ClientLayout({ slug: fixedSlug }: ClientLayoutProps) {
   const token = params.tableToken ?? ''
   const slug = fixedSlug ?? params.slug ?? ''
   const query = useTableByToken(token)
+  useDocumentTitle(query.data ? `${query.data.restaurant.name} · Menú Digital` : undefined)
 
   if (query.isPending) {
     return (
