@@ -17,13 +17,20 @@ Menú digital interactivo para restaurantes (QR en mesa). Una sola SPA con tres 
 | **Cocina (KDS)** | cocineros | tarjetas de comandas aprobadas con tiempo transcurrido, color por urgencia y notas resaltadas; marca como listo |
 
 Modelo de negocio decidido: **SaaS multi-restaurante** (una app, una base Supabase, cada restaurante con su `slug`).
-Estado actual: **Fases 0–6 completadas y la demo ya está desplegada en Vercel**, apuntando al proyecto Supabase
-de **desarrollo** (`oopowxlxpwsjpmpyuckm`) — no hay todavía un proyecto Supabase separado de producción. Backend
-en Supabase (dev) y frontend conectado de punta a punta: comensal, mozo, cocina y **administración** (menú con
+Estado actual: **Fases 0–6 completadas, desplegado en Vercel y con entornos separados**: Supabase de
+**desarrollo** (`oopowxlxpwsjpmpyuckm`, usado por `.env.local` y los Preview de Vercel) y Supabase de
+**producción** (proyecto propio, usado por el deploy Production de Vercel; migraciones aplicadas **sin seed**).
+Ya se puede dar de alta un restaurante real (`docs/alta-restaurante.md`). Reglas de operación de los dos
+entornos en `docs/deploy.md` — en particular, **nunca `npm run db:push` contra prod** (incluye el seed) y los
+`db:verify*` sólo corren contra dev. Frontend conectado de punta a punta: comensal, mozo, cocina y **administración** (menú con
 variantes, mesas/QR, personal e invitaciones, configuración) operan sobre datos reales; el tenant demo
 (`/demo/*`, incluido `/demo/admin`) funciona sin login para mostrar las cuatro vistas a un prospecto. La app es
 instalable como **PWA**, mozo/cocina tienen aviso sonoro + vibración y la cocina tiene Wake Lock + pantalla
 completa para tablets. Hay CI (`.github/workflows/ci.yml`) y docs de operación en `docs/` (`deploy.md`,
+`alta-restaurante.md`, `manual-mozo-cocina.md`). Cualquier acción sobre el proyecto de **producción** (migrar,
+borrar un restaurante, cambiar Auth/SMTP) requiere decisión y credenciales del usuario: no se hace desde acá sin
+que lo pida explícitamente. Las próximas funcionalidades (sin plan todavía) están listadas en
+[`docs/nuevas-funcionalidades.md`](docs/nuevas-funcionalidades.md).
 `alta-restaurante.md`, `manual-mozo-cocina.md`, `continuidad-proyecto.md` — guía paso a paso para el usuario,
 sin asumir conocimientos previos, sobre cómo pedir cambios y cómo dar de alta/vender a un cliente nuevo).
 **Pendiente real, fuera de código:** crear el proyecto Supabase
@@ -294,6 +301,8 @@ Cualquier función de autorización nueva (booleana, usada en `if not ... then r
 - [x] **Fase 3** — Auth (login/registro, confirmación de email), `StaffLayout` con guard por rol, `/mozo` y `/cocina` reales, filtro por asignación de mozo, pestaña Mesas + `close_table_session`, `db:verify:staff` (7 checks)
 - [x] **Fase 4** — fusionada: el editor de variantes vive en `ItemEditModal`/`OptionGroupEditor` (Fase 5)
 - [x] **Fase 5** — Panel admin (`/admin`, y `/demo/admin` sin login): menú con precio/visible/agotado hoy inline + variantes, mesas/sectores con QR descargable y hoja para imprimir, personal (roles, invitaciones, asignación de mozos), configuración (nombre/logo/color/moneda) con subida de imágenes a Storage. 59 tests, todo verificado en vivo contra el tenant demo (crear plato con variantes → aparece en el menú real del comensal; cerrar mesa; cambiar el color y verlo propagarse a `StaffTopBar`/`DemoBar`/comensal). **Pendiente de esta fase:** verificación end-to-end del login real de un mozo/admin de carne y hueso (bloqueada por confirmación de email, igual que en la Fase 3 — ver §5c)
-- [x] **Fase 6** — Sonido + vibración en mozo/cocina (`lib/sound.ts`, mute persistido por dispositivo), PWA instalable (`vite-plugin-pwa`, íconos propios), Wake Lock + pantalla completa en cocina, landing con tarjeta de Admin y CTA a `/registro`, red de seguridad client-side para el reset horario de la demo (`useAutoResetDemo`, por si `pg_cron` no llegó a activarse), CI (`.github/workflows/ci.yml`: lint/typecheck/test/build), `vercel.json` (rewrite SPA) y docs de operación (`docs/deploy.md`, `docs/alta-restaurante.md`, `docs/manual-mozo-cocina.md`). **Pendiente, fuera de código:** crear el proyecto Supabase de producción y hacer el deploy real a Vercel (ver `docs/deploy.md`) — son acciones externas que requieren decisión y credenciales del usuario.
+- [x] **Fase 6** — Sonido + vibración en mozo/cocina (`lib/sound.ts`, mute persistido por dispositivo), PWA instalable (`vite-plugin-pwa`, íconos propios), Wake Lock + pantalla completa en cocina, landing con tarjeta de Admin y CTA a `/registro`, red de seguridad client-side para el reset horario de la demo (`useAutoResetDemo`, por si `pg_cron` no llegó a activarse), CI (`.github/workflows/ci.yml`: lint/typecheck/test/build), `vercel.json` (rewrite SPA) y docs de operación (`docs/deploy.md`, `docs/alta-restaurante.md`, `docs/manual-mozo-cocina.md`).
+- [x] **Puesta en producción** — proyecto Supabase de producción separado del de desarrollo, Vercel Production → prod y Preview → dev (`docs/deploy.md`). Alta de restaurante probada con un usuario real (el email de confirmación cae en spam hasta tener SMTP propio).
+- [ ] **Siguiente** — ver [`docs/nuevas-funcionalidades.md`](docs/nuevas-funcionalidades.md) (v1.1: pulido de admin/mozo/cocina, suspensión de restaurantes y panel superadmin; v2: Mercado Pago). Pedir un plan de implementación antes de empezar.
 
-Fuera de alcance del MVP: pagos online, impresión térmica, facturación de suscripciones, reportes, app nativa.
+Fuera de alcance del MVP: pagos online (planificado como v2 con Mercado Pago, ver `docs/nuevas-funcionalidades.md`), impresión térmica, facturación de suscripciones, reportes, app nativa.

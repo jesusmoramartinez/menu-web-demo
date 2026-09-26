@@ -1,7 +1,8 @@
 # Alta de un restaurante nuevo
 
-Checklist para onboardear un cliente real, de punta a punta, en unos 30 minutos. Pensado para correrlo contra
-el proyecto de producción (ver `docs/deploy.md`); sirve igual contra dev para probar el flujo.
+Checklist para onboardear un cliente real, de punta a punta, en unos 30 minutos. Se corre contra el deploy de
+**producción** (dev y prod ya están separados, ver `docs/deploy.md`); sirve igual contra un Preview (dev) para
+ensayar el flujo. Para borrar un restaurante de prueba, ver `docs/deploy.md` §5.
 
 ## 1. Cuenta y restaurante (el dueño)
 
@@ -10,6 +11,12 @@ el proyecto de producción (ver `docs/deploy.md`); sirve igual contra dev para p
    `/r/<slug>/m/<token>`) y los datos de la cuenta (email + contraseña).
 3. Revisar el email y confirmar la cuenta (el link vuelve a `/registro` y termina el alta solo). Sin confirmar
    el email no hay sesión — es el comportamiento esperado del proyecto (`CLAUDE.md` §5c).
+   - **El email suele caer en spam** (comprobado en Gmail): avisarle al dueño que lo busque en "Spam" y lo marque
+     como "No es spam", o hacer este paso junto a él. Plan B si no llega: ver `docs/deploy.md` §1 ("Email de
+     confirmación").
+   - Abrir el link **en el mismo navegador** donde se completó el registro: la acción pendiente ("crear
+     restaurante") queda guardada en ese navegador. Si se confirma desde otro dispositivo, la cuenta queda
+     confirmada pero sin restaurante: iniciar sesión y repetir `/registro` → "Crear mi restaurante".
 4. Una vez confirmado, el dueño queda como `owner` de su restaurante y cae en `/admin`.
 
 ## 2. Menú (`/admin/menu`)
