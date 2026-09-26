@@ -66,6 +66,7 @@ Roadmap y decisiones de producto en [`docs/plan-producto.md`](docs/plan-producto
 
 ## Operación y deploy
 
-- [`docs/deploy.md`](docs/deploy.md) — poner el proyecto en producción (Supabase + Vercel + CI).
+- [`docs/deploy.md`](docs/deploy.md) — entornos dev/prod (Supabase + Vercel + CI), migraciones y borrado manual de un restaurante.
+- [`docs/nuevas-funcionalidades.md`](docs/nuevas-funcionalidades.md) — próximas funcionalidades (v1.1 y v2 con Mercado Pago).
 - [`docs/alta-restaurante.md`](docs/alta-restaurante.md) — checklist para dar de alta un cliente nuevo.
 - [`docs/manual-mozo-cocina.md`](docs/manual-mozo-cocina.md) — guía rápida para el personal de salón y cocina.
