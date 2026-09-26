@@ -31,6 +31,13 @@ completa para tablets. Hay CI (`.github/workflows/ci.yml`) y docs de operación 
 borrar un restaurante, cambiar Auth/SMTP) requiere decisión y credenciales del usuario: no se hace desde acá sin
 que lo pida explícitamente. Las próximas funcionalidades (sin plan todavía) están listadas en
 [`docs/nuevas-funcionalidades.md`](docs/nuevas-funcionalidades.md).
+`alta-restaurante.md`, `manual-mozo-cocina.md`, `continuidad-proyecto.md` — guía paso a paso para el usuario,
+sin asumir conocimientos previos, sobre cómo pedir cambios y cómo dar de alta/vender a un cliente nuevo).
+**Pendiente real, fuera de código:** crear el proyecto Supabase
+de producción y migrar Vercel a esas credenciales antes de dar de alta el primer cliente real (ver
+`docs/deploy.md`) — mientras compartan proyecto, el `pg_cron` de `reset_demo()` y el tenant "Bar de Prueba" del
+seed corren sobre la misma base que sirve la demo pública. Son acciones externas que requieren decisión y
+credenciales del usuario, no se hacen desde acá sin que lo pida explícitamente.
 
 ## 2. Stack
 
